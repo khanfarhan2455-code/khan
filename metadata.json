@@ -1,0 +1,6 @@
+{
+  "name": "Rapid Cool Services",
+  "description": "Expert HVAC and Appliance Repair in Mumbai with a dynamic price estimation engine.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
