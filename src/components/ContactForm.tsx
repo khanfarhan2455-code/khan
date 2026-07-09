@@ -266,7 +266,7 @@ export default function ContactForm({
                     Instagram: <span className="text-[#0248a3] font-bold">{BRAND_CONTACT.instagram}</span>
                   </p>
                   <p className="text-[10px] text-gray-500 mt-0.5 font-sans">
-                    Email: support@rapidcoolservices.com
+                    Email: rapidcoolservices0services@gail.com
                   </p>
                 </div>
               </div>
