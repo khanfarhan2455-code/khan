@@ -81,7 +81,7 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
   const fetchBookings = async (isSilent = false) => {
     if (!isSilent) setIsRefreshing(true);
     try {
-      const response = await fetch("https://rapidcool-backend.onrender.com/api/bookings");
+      const response = await fetch("https://https://rapidcool-new-backend-9x2r.onrender.com/api/bookings");
       if (response.ok) {
         const resData = await response.json();
         const freshList: AdminBooking[] = resData.bookings || [];
@@ -137,7 +137,7 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
     setLoadingLogin(true);
 
     try {
-      const response = await fetch("https://rapidcool-backend.onrender.com/api/admin/login", {
+      const response = await fetch("https://https://rapidcool-new-backend-9x2r.onrender.com/api/admin/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password }),
