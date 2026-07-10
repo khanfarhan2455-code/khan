@@ -166,7 +166,7 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
 
   const updateBookingStatus = async (id: string, newStatus: "New" | "Assigned" | "Completed") => {
     try {
-      const response = await fetch(`/api/bookings/${id}`, {
+      const response = await fetch(`https://rapidcool-new-backend-9x2r.onrender.com/api/bookings/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: newStatus }),
@@ -185,7 +185,7 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
   const deleteBookingRecord = async (id: string) => {
     if (!confirm("Are you sure you want to delete this booking permanently from the database?")) return;
     try {
-      const response = await fetch(`/api/bookings/${id}`, { method: "DELETE" });
+      const response = await fetch(`https://rapidcool-new-backend-9x2r.onrender.com/api/bookings/${id}`, { method: "DELETE" });
       if (response.ok) {
         setBookings(prev => prev.filter(b => b.id !== id));
       }
@@ -196,7 +196,7 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
 
   // CSV Export trigger
   const triggerCSVDownload = () => {
-    window.open("/api/bookings/export", "_blank");
+    window.open("https://rapidcool-new-backend-9x2r.onrender.com/api/bookings/export", "_blank");
   };
 
   // Filter Bookings logic client side for ultra responsive feedback
