@@ -114,10 +114,10 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
     }
   };
 
-  // Load Session on start
+// Load Session on start
   useEffect(() => {
     const savedToken = localStorage.getItem("rapid_cool_admin_token");
-    if (savedToken === "rapid_cool_verified_session_token_2026") {
+    if (savedToken) {
       setIsAuthenticated(true);
       fetchBookings();
     } else {
@@ -162,7 +162,6 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
       setLoadingLogin(false);
     }
   };
-
   const handleLogout = () => {
     localStorage.removeItem("rapid_cool_admin_token");
     setIsAuthenticated(false);
