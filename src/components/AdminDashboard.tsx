@@ -6,6 +6,11 @@ import {
 import { MUMBAI_SUBURBS, SERVICES_LIST } from "../data";
 import { motion, AnimatePresence } from "motion/react";
 
+// ==========================================
+// 💡 LIVE PRODUCTION BACKEND CONFIGURATION
+// ==========================================
+const API_BASE_URL = "https://rapidcool-new-backend.onrender.com";
+
 interface AdminBooking {
   id: string;
   date: string;
@@ -81,7 +86,7 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
   const fetchBookings = async (isSilent = false) => {
     if (!isSilent) setIsRefreshing(true);
     try {
-      const response = await fetch("[https://rapidcool-new-backend.onrender.com](https://rapidcool-new-backend.onrender.com)");
+      const response = await fetch(`${API_BASE_URL}/api/bookings`);
       if (response.ok) {
         const resData = await response.json();
         const freshList: AdminBooking[] = resData.bookings || [];
@@ -137,7 +142,7 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
     setLoadingLogin(true);
 
     try {
-      const response = await fetch([https://rapidcool-new-backend.onrender.com](https://rapidcool-new-backend.onrender.com)/api/admin/login", {
+      const response = await fetch(`${API_BASE_URL}/api/admin/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password }),
@@ -166,7 +171,7 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
 
   const updateBookingStatus = async (id: string, newStatus: "New" | "Assigned" | "Completed") => {
     try {
-      const response = await fetch(`[https://rapidcool-new-backend.onrender.com](https://rapidcool-new-backend.onrender.com)/api/bookings/${id}`, {
+      const response = await fetch(`${API_BASE_URL}/api/bookings/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: newStatus }),
@@ -185,7 +190,7 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
   const deleteBookingRecord = async (id: string) => {
     if (!confirm("Are you sure you want to delete this booking permanently from the database?")) return;
     try {
-      const response = await fetch(`[https://rapidcool-new-backend.onrender.com](https://rapidcool-new-backend.onrender.com)/api/bookings/${id}`, { method: "DELETE" });
+      const response = await fetch(`${API_BASE_URL}/api/bookings/${id}`, { method: "DELETE" });
       if (response.ok) {
         setBookings(prev => prev.filter(b => b.id !== id));
       }
@@ -196,7 +201,7 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
 
   // CSV Export trigger
   const triggerCSVDownload = () => {
-    window.open("[https://rapidcool-new-backend.onrender.com](https://rapidcool-new-backend.onrender.com)/api/bookings/export", "_blank");
+    window.open(`${API_BASE_URL}/api/bookings/export`, "_blank");
   };
 
   // Filter Bookings logic client side for ultra responsive feedback
@@ -326,7 +331,7 @@ function doPost(e) {
                 onClick={() => {
                   const id = newBookingNotification.id;
                   setNewBookingNotification(null);
-                  setSearchTerm(id); // focus search directly on this booking!
+                  setSearchTerm(id);
                 }}
                 className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-[#011e41] text-[10px] font-black uppercase rounded-lg tracking-wider transition"
               >
@@ -637,7 +642,7 @@ function doPost(e) {
                   Active Dispatch Database ({filteredBookings.length} bookings listed)
                 </span>
                 <button
-                  onClick={fetchBookings}
+                  onClick={() => fetchBookings()}
                   disabled={isRefreshing}
                   className="p-1 text-slate-400 hover:text-white transition cursor-pointer"
                   title="Reload Live Database"
@@ -662,7 +667,7 @@ function doPost(e) {
                   </button>
                 </div>
               ) : (
-                /* Desktop Table / Laptop Layout View */
+                /* Desktop Table Layout View */
                 <div className="overflow-x-auto">
                   <table className="w-full text-left border-collapse font-sans text-xs min-w-[1000px]">
                     <thead>
@@ -761,12 +766,11 @@ function doPost(e) {
                             <span className="block text-[9px] text-slate-400 mt-1">Visit Escrow</span>
                           </td>
 
-                          {/* Col 7: Dispatch messaging + Actions */}
+                          {/* Col 7: Actions */}
                           <td className="py-4 px-5 text-center">
                             <div className="flex items-center justify-center gap-2">
-                              {/* Direct click-to-chat client linkage */}
                               <a
-                                href={`https://wa.me/91${b.mobileNumber}?text=Hello%20${encodeURIComponent(b.customerName)},%20this%20is%2520Rapid%20Cool%20Services%20Mumbai.%20We%20received%20your%20booking%20for%20${encodeURIComponent(b.applianceType)}%20(ID:%20${b.id}).%20Our%20certified%20technician%20is%20dispatched%20to%20your%20address%20in%20${encodeURIComponent(b.area)}.%20Please%20verify%20if%20you%20are%20available%20now.`}
+                                href={`https://wa.me/91${b.mobileNumber}?text=Hello%20${encodeURIComponent(b.customerName)},%20this%20is%20Rapid%20Cool%20Services%20Mumbai.%20We%20received%20your%20booking%20for%20${encodeURIComponent(b.applianceType)}%20(ID:%20${b.id}).%20Our%20certified%20technician%20is%20dispatched%20to%20your%20address%20in%20${encodeURIComponent(b.area)}.%20Please%20verify%20if%20you%20are%20available%20now.`}
                                 target="_blank"
                                 rel="noreferrer"
                                 className="p-1 px-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[9px] font-black uppercase tracking-wider flex items-center space-x-1 transition"
