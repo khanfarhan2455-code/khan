@@ -79,16 +79,15 @@ export default function ContactForm({
     const selectedApplianceName =
       SERVICES_LIST.find((s) => s.id === selectedServiceId)?.name || "General Inspection Service";
 
+    // Format target payload matching Express Backend expectations
     const payload = {
-      customerName: fullName,
-      mobileNumber: phoneNumber,
-      customerEmail: customerEmail,
-      applianceType: selectedApplianceName,
-      serviceRequired: selectedApplianceName,
-      area: selectedSuburb || "Andheri West",
-      address: fullAddress,
-      preferredDate: preferredDate || new Date().toISOString().split('T')[0],
-      additionalNotes: additionalNotes,
+      name: fullName,
+      email: customerEmail,
+      phone: phoneNumber,
+      service: selectedApplianceName,
+      date: preferredDate || new Date().toISOString().split('T')[0],
+      time: new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true }),
+      address: `${fullAddress}, ${selectedSuburb || "Andheri West"}`,
       express: express,
       warranty: warranty,
       visitingFee: totalEstimate === 0 ? 499 : totalEstimate,
@@ -117,7 +116,8 @@ export default function ContactForm({
         console.warn("Netlify backup submission failed to dial out locally.");
       }
 
-      const response = await fetch("/api/bookings", {
+      // 🟢 Corrected dynamic API call to the live Render backend
+      const response = await fetch("https://rapidcool-new-backend.onrender.com/api/bookings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -126,16 +126,17 @@ export default function ContactForm({
       const resData = await response.json();
 
       if (response.ok && resData.success) {
+        const referenceId = `RC-${Math.floor(100000 + Math.random() * 900000)}-MUM`;
         const savedBooking: LocalBooking = {
-          id: resData.booking.id,
-          name: resData.booking.customerName,
-          phone: resData.booking.mobileNumber,
-          suburb: resData.booking.area,
-          appliance: resData.booking.applianceType,
-          totalPrice: resData.booking.visitingFee,
-          express: resData.booking.express,
-          warranty: resData.booking.warranty,
-          time: `${resData.booking.date} • ${resData.booking.time}`,
+          id: referenceId,
+          name: fullName,
+          phone: phoneNumber,
+          suburb: selectedSuburb || "Andheri West",
+          appliance: selectedApplianceName,
+          totalPrice: totalEstimate === 0 ? 499 : totalEstimate,
+          express: express,
+          warranty: warranty,
+          time: `${payload.date} • ${payload.time}`,
         };
 
         const updated = [savedBooking, ...bookingsList];
@@ -645,4 +646,3 @@ export default function ContactForm({
     </section>
   );
 }
-
