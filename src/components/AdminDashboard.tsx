@@ -4,7 +4,6 @@ import {
   ChevronRight, Phone, MessageSquare, MapPin, Calendar, HelpCircle, Copy, AlertTriangle, ArrowLeft
 } from "lucide-react";
 import { MUMBAI_SUBURBS, SERVICES_LIST } from "../data";
-import { motion, AnimatePresence } from "motion/react";
 
 // ==========================================
 // 💡 LIVE PRODUCTION BACKEND CONFIGURATION
@@ -58,7 +57,7 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
   const [showSheetCode, setShowSheetCode] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
 
-  // Live chime sound trigger using native Web Audio synthesizer (no assets required)
+  // Live chime sound trigger using native Web Audio synthesizer
   const playChime = () => {
     try {
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
@@ -68,8 +67,8 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
       const gain = ctx.createGain();
       
       osc.type = "sine";
-      osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5 chime start
-      osc.frequency.setValueAtTime(880, ctx.currentTime + 0.15); // A5 chime peak
+      osc.frequency.setValueAtTime(587.33, ctx.currentTime); 
+      osc.frequency.setValueAtTime(880, ctx.currentTime + 0.15); 
       
       gain.gain.setValueAtTime(0.12, ctx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
@@ -79,7 +78,7 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
       osc.start();
       osc.stop(ctx.currentTime + 0.4);
     } catch (e) {
-      console.log("Subtle audio notification blocked by browser autoplay policy.");
+      console.log("Audio notification blocked by browser.");
     }
   };
 
@@ -91,13 +90,11 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
         const resData = await response.json();
         const freshList: AdminBooking[] = resData.bookings || [];
         
-        // If it is a background silent check and we already have some bookings loaded
         if (isSilent && bookings.length > 0) {
           const existingIds = new Set(bookings.map(b => b.id));
           const trulyNew = freshList.filter(b => !existingIds.has(b.id));
           
           if (trulyNew.length > 0) {
-            // Trigger beautiful real-time toast alert & audio chime
             setNewBookingNotification(trulyNew[0]);
             playChime();
           }
@@ -114,7 +111,7 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
     }
   };
 
-// Load Session on start
+  // Load Session on start
   useEffect(() => {
     const savedToken = localStorage.getItem("rapid_cool_admin_token");
     if (savedToken) {
@@ -125,14 +122,12 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
     }
   }, []);
 
-  // Set up 10-second polling interval when admin is active
+  // Set up 10-second polling interval
   useEffect(() => {
     if (!isAuthenticated) return;
-    
     const interval = setInterval(() => {
       fetchBookings(true);
     }, 10000);
-    
     return () => clearInterval(interval);
   }, [isAuthenticated, bookings]);
 
@@ -162,6 +157,7 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
       setLoadingLogin(false);
     }
   };
+
   const handleLogout = () => {
     localStorage.removeItem("rapid_cool_admin_token");
     setIsAuthenticated(false);
@@ -187,7 +183,7 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
   };
 
   const deleteBookingRecord = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this booking permanently from the database?")) return;
+    if (!confirm("Are you sure you want to delete this booking permanently?")) return;
     try {
       const response = await fetch(`${API_BASE_URL}/api/bookings/${id}`, { method: "DELETE" });
       if (response.ok) {
@@ -198,12 +194,10 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
     }
   };
 
-  // CSV Export trigger
   const triggerCSVDownload = () => {
     window.open(`${API_BASE_URL}/api/bookings/export`, "_blank");
   };
 
-  // Filter Bookings logic client side for ultra responsive feedback
   const filteredBookings = bookings.filter((b) => {
     const matchesSearch = 
       b.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -218,7 +212,6 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
     return matchesSearch && matchesSuburb && matchesStatus && matchesDate;
   });
 
-  // Calculate quick metrics
   const stats = {
     total: bookings.length,
     new: bookings.filter(b => b.status === "New").length,
@@ -243,13 +236,12 @@ function doPost(e) {
     const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
     
     if (data.action === "addBooking") {
-      // Append booking row 
       sheet.appendRow([
         data.id,
         data.date,
         data.time,
         data.customerName,
-        "'" + data.mobileNumber, // Force string representation inside sheets
+        "'" + data.mobileNumber, 
         data.customerEmail || "N/A",
         data.applianceType,
         data.serviceRequired,
@@ -265,7 +257,7 @@ function doPost(e) {
       const rows = sheet.getDataRange().getValues();
       for (let i = 1; i < rows.length; i++) {
         if (rows[i][0] === data.id) {
-          sheet.getRange(i + 1, 12).setValue(data.status); // Updates Status column
+          sheet.getRange(i + 1, 12).setValue(data.status); 
           break;
         }
       }
@@ -288,72 +280,65 @@ function doPost(e) {
   return (
     <div className="bg-[#030d1a] min-h-screen text-slate-100 font-sans selection:bg-amber-500 selection:text-slate-950 relative">
       
-      {/* Floating Real-Time Booking Alert Toast */}
-      <AnimatePresence>
-        {newBookingNotification && (
-          <motion.div
-            initial={{ opacity: 0, y: -50, scale: 0.9 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.9, y: -20 }}
-            className="fixed top-20 right-6 z-[9999] max-w-sm w-full bg-[#021329] border-2 border-amber-500 rounded-2xl p-5 shadow-2xl text-left backdrop-blur-md"
-          >
-            <div className="flex items-start justify-between">
-              <div className="flex items-center space-x-2.5">
-                <span className="flex h-3 w-3 relative">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-3 w-3 bg-rose-500"></span>
-                </span>
-                <span className="text-[10px] font-black uppercase tracking-wider text-amber-400 font-mono">
-                  🚨 LIVE WEBSITE NOTIFICATION
-                </span>
-              </div>
-              <button
-                onClick={() => setNewBookingNotification(null)}
-                className="text-slate-400 hover:text-white transition text-xs font-bold px-1.5 py-0.5 rounded bg-white/5"
-              >
-                ✕
-              </button>
+      {/* Non-motion Standard React Toast Alert */}
+      {newBookingNotification && (
+        <div className="fixed top-20 right-6 z-[9999] max-w-sm w-full bg-[#021329] border-2 border-amber-500 rounded-2xl p-5 shadow-2xl text-left backdrop-blur-md transition-all duration-300">
+          <div className="flex items-start justify-between">
+            <div className="flex items-center space-x-2.5">
+              <span className="flex h-3 w-3 relative">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-rose-500"></span>
+              </span>
+              <span className="text-[10px] font-black uppercase tracking-wider text-amber-400 font-mono">
+                🚨 LIVE WEBSITE NOTIFICATION
+              </span>
             </div>
+            <button
+              onClick={() => setNewBookingNotification(null)}
+              className="text-slate-400 hover:text-white transition text-xs font-bold px-1.5 py-0.5 rounded bg-white/5"
+            >
+              ✕
+            </button>
+          </div>
 
-            <div className="mt-3.5 space-y-1.5">
-              <p className="text-xs text-white leading-relaxed">
-                <strong>{newBookingNotification.customerName}</strong> has placed a new booking for <strong className="text-[#38bdf8]">{newBookingNotification.applianceType}</strong> in <strong className="text-white">{newBookingNotification.area}</strong>!
-              </p>
-              <div className="text-[11px] text-slate-300 font-mono flex justify-between">
-                <span>Phone: +91 {newBookingNotification.mobileNumber}</span>
-                <span className="text-amber-400 font-bold">₹{newBookingNotification.visitingFee}</span>
-              </div>
+          <div className="mt-3.5 space-y-1.5">
+            <p className="text-xs text-white leading-relaxed">
+              <strong>{newBookingNotification.customerName}</strong> has placed a new booking for <strong className="text-[#38bdf8]">{newBookingNotification.applianceType}</strong> in <strong className="text-white">{newBookingNotification.area}</strong>!
+            </p>
+            <div className="text-[11px] text-slate-300 font-mono flex justify-between">
+              <span>Phone: +91 {newBookingNotification.mobileNumber}</span>
+              <span className="text-amber-400 font-bold">₹{newBookingNotification.visitingFee}</span>
             </div>
+          </div>
 
-            <div className="mt-4 flex gap-2 justify-end">
-              <button
-                onClick={() => {
-                  const id = newBookingNotification.id;
-                  setNewBookingNotification(null);
-                  setSearchTerm(id);
-                }}
-                className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-[#011e41] text-[10px] font-black uppercase rounded-lg tracking-wider transition"
-              >
-                View Ticket
-              </button>
-              <button
-                onClick={() => setNewBookingNotification(null)}
-                className="px-3.5 py-1.5 bg-white/10 hover:bg-white/15 text-white text-[10px] font-bold uppercase rounded-lg transition"
-              >
-                Dismiss
-              </button>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          <div className="mt-4 flex gap-2 justify-end">
+            <button
+              onClick={() => {
+                const id = newBookingNotification.id;
+                setNewBookingNotification(null);
+                setSearchTerm(id);
+              }}
+              className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-[#011e41] text-[10px] font-black uppercase rounded-lg tracking-wider transition"
+            >
+              View Ticket
+            </button>
+            <button
+              onClick={() => setNewBookingNotification(null)}
+              className="px-3.5 py-1.5 bg-white/10 hover:bg-white/15 text-white text-[10px] font-bold uppercase rounded-lg transition"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Header Bar */}
-      <header className="border-b border-blue-900/40 bg-[#020912]/92 sticky top-0 z-50 backdrop-blur-md">
+      <header className="border-b border-blue-900/40 bg-[#020912]/90 sticky top-0 z-50 backdrop-blur-md">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <button 
               onClick={onClose}
-              className="p-1.5 rounded-lg border border-slate-750 hover:bg-white/5 transition text-slate-400 hover:text-white"
+              className="p-1.5 rounded-lg border border-slate-700 hover:bg-white/5 transition text-slate-400 hover:text-white"
             >
               <ArrowLeft className="w-4 h-4" />
             </button>
@@ -470,45 +455,39 @@ function doPost(e) {
             </div>
           </div>
         ) : (
-          /* ACTUAL ADMINISTRATIVE USER WORKSPACE */
+          /* ACTUAL ADMINISTRATIVE WORKSPACE */
           <div className="space-y-8">
             
-            {/* 1. Quick Stats Grid */}
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-              
+            {/* Quick Stats Grid */}
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-left">
               <div className="bg-[#021329]/60 border border-blue-900/30 rounded-xl p-4.5 space-y-1">
                 <span className="text-[9px] font-mono font-bold uppercase text-slate-400 block">Total Tickets</span>
                 <span className="text-2xl font-black text-white block">{stats.total}</span>
-                <span className="text-[10px] text-slate-400 font-mono">Registered in local cache</span>
+                <span className="text-[10px] text-slate-400 font-mono">In local cache</span>
               </div>
-
               <div className="bg-[#021329]/60 border border-blue-900/30 rounded-xl p-4.5 space-y-1">
                 <span className="text-[9px] font-mono font-bold uppercase text-amber-400 block">⚡ New Bookings</span>
                 <span className="text-2xl font-black text-amber-400 block">{stats.new}</span>
                 <span className="text-[10px] text-slate-400 font-mono">Awaiting dispatch</span>
               </div>
-
               <div className="bg-[#021329]/60 border border-blue-900/30 rounded-xl p-4.5 space-y-1">
                 <span className="text-[9px] font-mono font-bold uppercase text-blue-400 block">🛠️ Assigned Active</span>
                 <span className="text-2xl font-black text-blue-400 block">{stats.assigned}</span>
                 <span className="text-[10px] text-slate-400 font-mono">Technicians en route</span>
               </div>
-
               <div className="bg-[#021329]/60 border border-blue-900/30 rounded-xl p-4.5 space-y-1">
                 <span className="text-[9px] font-mono font-bold uppercase text-emerald-400 block">✓ Completed</span>
                 <span className="text-2xl font-black text-emerald-400 block">{stats.completed}</span>
                 <span className="text-[10px] text-slate-400 font-mono">Invoices finalised</span>
               </div>
-
               <div className="bg-[#021329]/60 border border-amber-500/20 rounded-xl p-4.5 space-y-1 col-span-2 md:col-span-1">
                 <span className="text-[9px] font-mono font-bold uppercase text-amber-500 block">Visiting Escrow</span>
                 <span className="text-2xl font-black text-amber-500 block">₹{stats.revenue}</span>
                 <span className="text-[10px] text-slate-400 font-mono">Waived on final repair</span>
               </div>
-
             </div>
 
-            {/* 2. Admin Quick Guide & Google Sheet Config */}
+            {/* Google Sheet Config */}
             <div className="bg-[#011e41]/50 border border-blue-900/50 rounded-2xl p-6 space-y-4">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div className="space-y-1 text-left">
@@ -525,7 +504,6 @@ function doPost(e) {
                     Keep your Excel Sheets up to date automatically! We support appending real bookings as fresh rows directly into your selected Google Sheet via our secure lightweight micro-Apps Script.
                   </p>
                 </div>
-
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => setShowSheetCode(!showSheetCode)}
@@ -536,45 +514,36 @@ function doPost(e) {
                 </div>
               </div>
 
-              <AnimatePresence>
-                {showSheetCode && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: "auto" }}
-                    exit={{ opacity: 0, height: 0 }}
-                    className="overflow-hidden space-y-3 pt-4 border-t border-blue-900/40"
-                  >
-                    <div className="text-xs text-left text-slate-300 space-y-1.5 bg-slate-950 p-4 rounded-xl border border-blue-900/30">
-                      <p><strong>Step 1:</strong> Go to <a href="https://sheets.google.com" target="_blank" rel="noreferrer" className="text-amber-400 underline font-bold">sheets.google.com</a> and build a spreadsheet with the name <strong>"Rapid Cool Services Bookings"</strong>.</p>
-                      <p><strong>Step 2:</strong> In the upper menu, go to <strong>Extensions ➔ Apps Script</strong>.</p>
-                      <p><strong>Step 3:</strong> Paste the code block below, replacing any template code there perfectly.</p>
-                      <p><strong>Step 4:</strong> Click <strong>Deploy ➔ New Deployment</strong>. Choose <strong>Web App</strong>, change Who has access to <strong>"Anyone"</strong>, execute as <strong>"Me"</strong>, and click Deploy.</p>
-                      <p><strong>Step 5:</strong> Copy the output Web App URL and add it to your <code>.env.example / server</code> environment secrets as <code>GOOGLE_SHEET_WEBHOOK_URL</code>.</p>
-                    </div>
+              {showSheetCode && (
+                <div className="overflow-hidden space-y-3 pt-4 border-t border-blue-900/40">
+                  <div className="text-xs text-left text-slate-300 space-y-1.5 bg-slate-950 p-4 rounded-xl border border-blue-900/30">
+                    <p><strong>Step 1:</strong> Go to <a href="https://sheets.google.com" target="_blank" rel="noreferrer" className="text-amber-400 underline font-bold">sheets.google.com</a> and build a spreadsheet with the name <strong>"Rapid Cool Services Bookings"</strong>.</p>
+                    <p><strong>Step 2:</strong> In the upper menu, go to <strong>Extensions ➔ Apps Script</strong>.</p>
+                    <p><strong>Step 3:</strong> Paste the code block below, replacing any template code there perfectly.</p>
+                    <p><strong>Step 4:</strong> Click <strong>Deploy ➔ New Deployment</strong>. Choose <strong>Web App</strong>, change Who has access to <strong>"Anyone"</strong>, execute as <strong>"Me"</strong>, and click Deploy.</p>
+                    <p><strong>Step 5:</strong> Copy the output Web App URL and add it to your <code>.env.example / server</code> environment secrets as <code>GOOGLE_SHEET_WEBHOOK_URL</code>.</p>
+                  </div>
 
-                    <div className="relative">
-                      <pre className="text-[10px] text-slate-300 overflow-x-auto text-left bg-slate-950 p-4.5 rounded-xl border border-blue-900/60 font-mono leading-relaxed max-h-72">
-                        {appsScriptCode}
-                      </pre>
-                      <button
-                        onClick={copyToClipboard}
-                        className="absolute top-3 right-3 bg-white/10 hover:bg-white/15 text-white p-2 rounded-lg text-xs font-bold transition flex items-center space-x-1.5 bubble-button"
-                        title="Copy Apps Script to clipboard"
-                      >
-                        <Copy className="w-3.5 h-3.5" />
-                        <span>{copiedCode ? "Copied!" : "Copy Code"}</span>
-                      </button>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+                  <div className="relative">
+                    <pre className="text-[10px] text-slate-300 overflow-x-auto text-left bg-slate-950 p-4.5 rounded-xl border border-blue-900/60 font-mono leading-relaxed max-h-72">
+                      {appsScriptCode}
+                    </pre>
+                    <button
+                      onClick={copyToClipboard}
+                      className="absolute top-3 right-3 bg-white/10 hover:bg-white/15 text-white p-2 rounded-lg text-xs font-bold transition flex items-center space-x-1.5"
+                      title="Copy Apps Script to clipboard"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                      <span>{copiedCode ? "Copied!" : "Copy Code"}</span>
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
-            {/* 3. Search & Operational Filters Panel */}
+            {/* Search & Operational Filters Panel */}
             <div className="bg-[#020d1c]/80 border border-blue-900/30 rounded-2xl p-5 space-y-4">
               <div className="flex flex-col md:flex-row gap-4 items-center justify-between text-left">
-                
-                {/* Search Term input */}
                 <div className="relative w-full md:w-80">
                   <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
                     <Search className="w-4 h-4" />
@@ -588,7 +557,6 @@ function doPost(e) {
                   />
                 </div>
 
-                {/* Suburb Selector */}
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 w-full md:w-auto">
                   <div>
                     <select
@@ -603,7 +571,6 @@ function doPost(e) {
                     </select>
                   </div>
 
-                  {/* Status Selector */}
                   <div>
                     <select
                       value={statusFilter}
@@ -617,7 +584,6 @@ function doPost(e) {
                     </select>
                   </div>
 
-                  {/* Export CSV CTA */}
                   <div className="col-span-2 sm:col-span-1">
                     <button
                       onClick={triggerCSVDownload}
@@ -627,15 +593,12 @@ function doPost(e) {
                       <span>Export to CSV</span>
                     </button>
                   </div>
-
                 </div>
-
               </div>
             </div>
 
-            {/* 4. Live Table View / Mobile Cards Container */}
+            {/* Live Table View */}
             <div className="bg-[#021329]/20 border border-blue-900/20 rounded-2xl overflow-hidden shadow-2xl">
-              
               <div className="bg-slate-950/60 py-3.5 px-6 border-b border-blue-900/30 flex items-center justify-between">
                 <span className="text-xs uppercase font-black tracking-widest text-[#38bdf8] font-mono">
                   Active Dispatch Database ({filteredBookings.length} bookings listed)
@@ -657,7 +620,7 @@ function doPost(e) {
                 </div>
               ) : filteredBookings.length === 0 ? (
                 <div className="text-center py-20 text-slate-500 text-xs font-mono space-y-2">
-                  <p>🔍 No bookings found matching the selected search query or category filters.</p>
+                  <p>🔍 No bookings found matching the selected search query.</p>
                   <button 
                     onClick={() => { setSearchTerm(""); setStatusFilter(""); setSuburbFilter(""); }}
                     className="text-amber-500 hover:underline font-bold"
@@ -666,7 +629,6 @@ function doPost(e) {
                   </button>
                 </div>
               ) : (
-                /* Desktop Table Layout View */
                 <div className="overflow-x-auto">
                   <table className="w-full text-left border-collapse font-sans text-xs min-w-[1000px]">
                     <thead>
@@ -683,14 +645,12 @@ function doPost(e) {
                     <tbody className="divide-y divide-blue-900/10">
                       {filteredBookings.map((b) => (
                         <tr key={b.id} className="hover:bg-blue-950/20 bg-slate-950/10 transition">
-                          {/* Col 1: Ticket References */}
                           <td className="py-4 px-6 items-start font-mono text-left">
                             <strong className="block text-amber-400 text-sm font-black tracking-wider">{b.id}</strong>
                             <span className="block text-[10px] text-slate-400 mt-1">{b.date} • {b.time}</span>
                             <span className="block text-[9px] text-[#38bdf8] font-bold mt-1 uppercase">Pref: {b.preferredDate}</span>
                           </td>
 
-                          {/* Col 2: Customer Name, Email, Phone */}
                           <td className="py-4 px-5">
                             <strong className="block text-white text-sm font-extrabold">{b.customerName}</strong>
                             <div className="flex items-center space-x-1 text-slate-350 mt-1 font-mono font-bold">
@@ -702,7 +662,6 @@ function doPost(e) {
                             )}
                           </td>
 
-                          {/* Col 3: Service details */}
                           <td className="py-4 px-5">
                             <strong className="block text-[#38bdf8] text-[13px] font-black uppercase">{b.applianceType}</strong>
                             <span className="block text-slate-300 mt-1 font-medium">{b.serviceRequired}</span>
@@ -720,8 +679,7 @@ function doPost(e) {
                             </div>
                           </td>
 
-                          {/* Col 4: Location Address */}
-                          <td className="py-4 px-5 max-w-xs">
+                          <td className="py-4 px-5 max-w-xs text-left">
                             <div className="flex items-start space-x-1">
                               <MapPin className="w-3.5 h-3.5 text-rose-500 shrink-0 mt-0.5" />
                               <div>
@@ -738,34 +696,29 @@ function doPost(e) {
                             )}
                           </td>
 
-                          {/* Col 5: Dropdown Status update control */}
                           <td className="py-4 px-4 font-mono">
-                            <div className="space-y-1.5">
-                              <select
-                                value={b.status}
-                                onChange={(e) => updateBookingStatus(b.id, e.target.value as any)}
-                                className={`text-[10px] font-black uppercase tracking-wider py-1.5 px-2.5 rounded-lg border focus:outline-none cursor-pointer ${
-                                  b.status === "New" 
-                                    ? "bg-amber-500/15 text-amber-400 border-amber-500/30" 
-                                    : b.status === "Assigned"
-                                    ? "bg-blue-500/15 text-blue-400 border-blue-500/30"
-                                    : "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
-                                }`}
-                              >
-                                <option value="New" className="bg-[#030d1a] font-black text-amber-400">🚨 New Request</option>
-                                <option value="Assigned" className="bg-[#030d1a] font-black text-blue-400">🛠️ Assigned</option>
-                                <option value="Completed" className="bg-[#030d1a] font-black text-emerald-400">✓ Completed</option>
-                              </select>
-                            </div>
+                            <select
+                              value={b.status}
+                              onChange={(e) => updateBookingStatus(b.id, e.target.value as any)}
+                              className={`text-[10px] font-black uppercase tracking-wider py-1.5 px-2.5 rounded-lg border focus:outline-none cursor-pointer ${
+                                b.status === "New" 
+                                  ? "bg-amber-500/15 text-amber-400 border-amber-500/30" 
+                                  : b.status === "Assigned"
+                                  ? "bg-blue-500/15 text-blue-400 border-blue-500/30"
+                                  : "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
+                              }`}
+                            >
+                              <option value="New" className="bg-[#030d1a] font-black text-amber-400">🚨 New Request</option>
+                              <option value="Assigned" className="bg-[#030d1a] font-black text-blue-400">🛠️ Assigned</option>
+                              <option value="Completed" className="bg-[#030d1a] font-black text-emerald-400">✓ Completed</option>
+                            </select>
                           </td>
 
-                          {/* Col 6: Price costs */}
                           <td className="py-4 px-4 text-right font-mono">
                             <strong className="text-white font-black text-sm">₹{b.visitingFee}</strong>
                             <span className="block text-[9px] text-slate-400 mt-1">Visit Escrow</span>
                           </td>
 
-                          {/* Col 7: Actions */}
                           <td className="py-4 px-5 text-center">
                             <div className="flex items-center justify-center gap-2">
                               <a
@@ -773,16 +726,13 @@ function doPost(e) {
                                 target="_blank"
                                 rel="noreferrer"
                                 className="p-1 px-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[9px] font-black uppercase tracking-wider flex items-center space-x-1 transition"
-                                title="Instantly coordinate with homeowner on WhatsApp"
                               >
                                 <MessageSquare className="w-3 h-3 fill-white" />
-                                <span>WhatsApp Customer</span>
+                                <span>WhatsApp</span>
                               </a>
-
                               <button
                                 onClick={() => deleteBookingRecord(b.id)}
-                                className="p-1.5 bg-rose-950/25 text-rose-450 border border-rose-900/40 rounded-lg hover:bg-rose-900 hover:text-white transition"
-                                title="Remove reservation permanently"
+                                className="p-1.5 bg-rose-950/25 text-rose-400 border border-rose-900/40 rounded-lg hover:bg-rose-900 hover:text-white transition"
                               >
                                 Delete
                               </button>
@@ -794,12 +744,9 @@ function doPost(e) {
                   </table>
                 </div>
               )}
-
             </div>
-
           </div>
         )}
-
       </main>
     </div>
   );
