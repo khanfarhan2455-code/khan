@@ -1,615 +1,806 @@
 import { useState, useEffect, FormEvent } from "react";
-import { Mail, Phone, MapPin, Calendar, CheckCircle2, ClipboardList, Trash2, ArrowRight } from "lucide-react";
-import { MUMBAI_SUBURBS, SERVICES_LIST, BRAND_CONTACT } from "../data";
+import { 
+  Lock, Search, Filter, RefreshCw, LogOut, CheckCircle, Wrench, Clock, FileSpreadsheet, 
+  ChevronRight, Phone, MessageSquare, MapPin, Calendar, HelpCircle, Copy, AlertTriangle, ArrowLeft
+} from "lucide-react";
+import { MUMBAI_SUBURBS, SERVICES_LIST } from "../data";
 import { motion, AnimatePresence } from "motion/react";
 
-interface ContactFormProps {
-  selectedServiceId: string;
-  setSelectedServiceId: (id: string) => void;
-  express: boolean;
-  setExpress: (val: boolean) => void;
-  warranty: boolean;
-  setWarranty: (val: boolean) => void;
-  totalEstimate: number;
-}
+// ==========================================
+// 💡 LIVE PRODUCTION BACKEND CONFIGURATION
+// ==========================================
+const API_BASE_URL = "https://rapidcool-new-backend.onrender.com";
 
-interface LocalBooking {
+interface AdminBooking {
   id: string;
-  name: string;
-  phone: string;
-  suburb: string;
-  appliance: string;
-  totalPrice: number;
+  date: string;
+  time: string;
+  customerName: string;
+  mobileNumber: string;
+  customerEmail: string;
+  applianceType: string;
+  serviceRequired: string;
+  area: string;
+  address: string;
+  preferredDate: string;
+  additionalNotes: string;
+  status: "New" | "Assigned" | "Completed";
   express: boolean;
   warranty: boolean;
-  time: string;
+  visitingFee: number;
+  deliveryTries?: {
+    emailAdmin: number;
+    emailCustomer: number;
+    sheets: number;
+    whatsapp: number;
+  };
+  errors?: string[];
 }
 
-export default function ContactForm({
-  selectedServiceId,
-  setSelectedServiceId,
-  express,
-  setExpress,
-  warranty,
-  setWarranty,
-  totalEstimate,
-}: ContactFormProps) {
-  const [fullName, setFullName] = useState("");
-  const [phoneNumber, setPhoneNumber] = useState("");
-  const [customerEmail, setCustomerEmail] = useState("");
-  const [selectedSuburb, setSelectedSuburb] = useState("");
-  const [fullAddress, setFullAddress] = useState("");
-  const [preferredDate, setPreferredDate] = useState("");
-  const [additionalNotes, setAdditionalNotes] = useState("");
-  
-  const [bookingLoading, setBookingLoading] = useState(false);
-  const [bookingError, setBookingError] = useState("");
+export default function AdminDashboard({ onClose }: { onClose: () => void }) {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [loginError, setLoginError] = useState("");
+  const [loadingLogin, setLoadingLogin] = useState(false);
 
-  const [submittedBooking, setSubmittedBooking] = useState<LocalBooking | null>(null);
-  const [bookingsList, setBookingsList] = useState<LocalBooking[]>([]);
+  // Dashboard Data State
+  const [bookings, setBookings] = useState<AdminBooking[]>([]);
+  const [newBookingNotification, setNewBookingNotification] = useState<AdminBooking | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [suburbFilter, setSuburbFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [dateFilter, setDateFilter] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const loadBookings = () => {
-    const saved = localStorage.getItem("rapid_cool_bookings");
-    if (saved) {
-      try {
-        setBookingsList(JSON.parse(saved));
-      } catch (e) {
-        console.error("Failed to parse bookings", e);
-      }
-    } else {
-      setBookingsList([]);
+  // Sheet Integration Guide Tab
+  const [showSheetCode, setShowSheetCode] = useState(false);
+  const [copiedCode, setCopiedCode] = useState(false);
+
+  // Live chime sound trigger using native Web Audio synthesizer (no assets required)
+  const playChime = () => {
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5 chime start
+      osc.frequency.setValueAtTime(880, ctx.currentTime + 0.15); // A5 chime peak
+      
+      gain.gain.setValueAtTime(0.12, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
+      
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.4);
+    } catch (e) {
+      console.log("Subtle audio notification blocked by browser autoplay policy.");
     }
   };
 
-  useEffect(() => {
-    loadBookings();
+  const fetchBookings = async (isSilent = false) => {
+    if (!isSilent) setIsRefreshing(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/bookings`);
+      if (response.ok) {
+        const resData = await response.json();
+        const freshList: AdminBooking[] = resData.bookings || [];
+        
+        // If it is a background silent check and we already have some bookings loaded
+        if (isSilent && bookings.length > 0) {
+          const existingIds = new Set(bookings.map(b => b.id));
+          const trulyNew = freshList.filter(b => !existingIds.has(b.id));
+          
+          if (trulyNew.length > 0) {
+            // Trigger beautiful real-time toast alert & audio chime
+            setNewBookingNotification(trulyNew[0]);
+            playChime();
+          }
+        }
+        setBookings(freshList);
+      }
+    } catch (error) {
+      console.error("Failed to query bookings:", error);
+    } finally {
+      if (!isSilent) {
+        setIsLoading(false);
+        setIsRefreshing(false);
+      }
+    }
+  };
 
-    // Listen to booking changes across application components
-    window.addEventListener("booking-added", loadBookings);
-    return () => {
-      window.removeEventListener("booking-added", loadBookings);
-    };
+// Load Session on start
+  useEffect(() => {
+    const savedToken = localStorage.getItem("rapid_cool_admin_token");
+    if (savedToken) {
+      setIsAuthenticated(true);
+      fetchBookings();
+    } else {
+      setIsLoading(false);
+    }
   }, []);
 
-  const handleBookingSubmit = async (e: FormEvent) => {
+  // Set up 10-second polling interval when admin is active
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    
+    const interval = setInterval(() => {
+      fetchBookings(true);
+    }, 10000);
+    
+    return () => clearInterval(interval);
+  }, [isAuthenticated, bookings]);
+
+  const handleLogin = async (e: FormEvent) => {
     e.preventDefault();
-    setBookingError("");
-    setBookingLoading(true);
-
-    const selectedApplianceName =
-      SERVICES_LIST.find((s) => s.id === selectedServiceId)?.name || "General Inspection Service";
-
-    // Standard Backend schema validation format
-    const payload = {
-      name: fullName,
-      email: customerEmail || "no-email@rapidcool.com",
-      phone: phoneNumber,
-      service: selectedApplianceName, // Some backends read it as 'service' or 'appliance'
-      appliance: selectedApplianceName, 
-      suburb: selectedSuburb || "Andheri West",
-      date: preferredDate || new Date().toISOString().split('T')[0],
-      time: new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true }),
-      address: `${fullAddress}, ${selectedSuburb || "Andheri West"}`,
-      notes: additionalNotes || "",
-      express: express,
-      warranty: warranty,
-      visitingFee: totalEstimate === 0 ? 499 : totalEstimate,
-    };
+    setLoginError("");
+    setLoadingLogin(true);
 
     try {
-      // 🟢 POST live call to database backend
-      const response = await fetch("https://rapidcool-new-backend.onrender.com/api/bookings", {
+      const response = await fetch(`${API_BASE_URL}/api/admin/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ username, password }),
       });
 
       const resData = await response.json();
-
-      // Fix 1: check only 'response.ok' instead of 'resData.success' as API might return direct document data
-      if (response.ok) {
-        const referenceId = resData._id || resData.id || `RC-${Math.floor(100000 + Math.random() * 900000)}-MUM`;
-        
-        const savedBooking: LocalBooking = {
-          id: referenceId,
-          name: fullName,
-          phone: phoneNumber,
-          suburb: selectedSuburb || "Andheri West",
-          appliance: selectedApplianceName,
-          totalPrice: totalEstimate === 0 ? 499 : totalEstimate,
-          express: express,
-          warranty: warranty,
-          time: `${payload.date} • ${payload.time}`,
-        };
-
-        const updated = [savedBooking, ...bookingsList];
-        setBookingsList(updated);
-        localStorage.setItem("rapid_cool_bookings", JSON.stringify(updated));
-        
-        setSubmittedBooking(savedBooking);
-
-        // Fix 2: Refresh event trigger so Admin Dashboard automatically updates in real-time
-        window.dispatchEvent(new Event("booking-added"));
-
-        // Reset inputs
-        setFullName("");
-        setPhoneNumber("");
-        setCustomerEmail("");
-        setFullAddress("");
-        setSelectedSuburb("");
-        setPreferredDate("");
-        setAdditionalNotes("");
+      if (response.ok && resData.success) {
+        localStorage.setItem("rapid_cool_admin_token", resData.token);
+        setIsAuthenticated(true);
+        fetchBookings();
       } else {
-        throw new Error(resData.message || resData.error || "Failed on Server validation.");
+        setLoginError(resData.error || "Incorrect admin credentials.");
       }
-    } catch (apiErr: any) {
-      console.warn("Express API unreachable. Saving booking locally in browser memory:", apiErr);
-      
-      const referenceId = `RC-${Math.floor(100000 + Math.random() * 900000)}-MUM`;
-      const fallbackBooking: LocalBooking = {
-        id: referenceId,
-        name: fullName,
-        phone: phoneNumber,
-        suburb: selectedSuburb || "Andheri West",
-        appliance: selectedApplianceName,
-        totalPrice: totalEstimate === 0 ? 499 : totalEstimate,
-        express: express,
-        warranty: warranty,
-        time: new Date().toLocaleTimeString("en-IN", {
-          hour: "2-digit",
-          minute: "2-digit",
-          hour12: true,
-        }),
-      };
-
-      const updated = [fallbackBooking, ...bookingsList];
-      setBookingsList(updated);
-      localStorage.setItem("rapid_cool_bookings", JSON.stringify(updated));
-      setSubmittedBooking(fallbackBooking);
-
-      setFullName("");
-      setPhoneNumber("");
-      setCustomerEmail("");
-      setFullAddress("");
-      setSelectedSuburb("");
-      setPreferredDate("");
-      setAdditionalNotes("");
+    } catch (e) {
+      setLoginError("Failed to authenticate with system server. Please make sure the backend is active.");
     } finally {
-      setBookingLoading(false);
+      setLoadingLogin(false);
+    }
+  };
+  const handleLogout = () => {
+    localStorage.removeItem("rapid_cool_admin_token");
+    setIsAuthenticated(false);
+    setBookings([]);
+  };
+
+  const updateBookingStatus = async (id: string, newStatus: "New" | "Assigned" | "Completed") => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/bookings/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      });
+
+      if (response.ok) {
+        setBookings(prev =>
+          prev.map(b => (b.id === id ? { ...b, status: newStatus } : b))
+        );
+      }
+    } catch (e) {
+      alert("Error updating booking status.");
     }
   };
 
-  const deleteBooking = (id: string) => {
-    const filtered = bookingsList.filter((b) => b.id !== id);
-    setBookingsList(filtered);
-    localStorage.setItem("rapid_cool_bookings", JSON.stringify(filtered));
-    window.dispatchEvent(new Event("booking-added"));
+  const deleteBookingRecord = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this booking permanently from the database?")) return;
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/bookings/${id}`, { method: "DELETE" });
+      if (response.ok) {
+        setBookings(prev => prev.filter(b => b.id !== id));
+      }
+    } catch (e) {
+      alert("Failed to delete booking.");
+    }
+  };
+
+  // CSV Export trigger
+  const triggerCSVDownload = () => {
+    window.open(`${API_BASE_URL}/api/bookings/export`, "_blank");
+  };
+
+  // Filter Bookings logic client side for ultra responsive feedback
+  const filteredBookings = bookings.filter((b) => {
+    const matchesSearch = 
+      b.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      b.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      b.mobileNumber.includes(searchTerm) ||
+      b.address.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    const matchesSuburb = suburbFilter === "" || b.area === suburbFilter;
+    const matchesStatus = statusFilter === "" || b.status === statusFilter;
+    const matchesDate = dateFilter === "" || b.preferredDate === dateFilter;
+
+    return matchesSearch && matchesSuburb && matchesStatus && matchesDate;
+  });
+
+  // Calculate quick metrics
+  const stats = {
+    total: bookings.length,
+    new: bookings.filter(b => b.status === "New").length,
+    assigned: bookings.filter(b => b.status === "Assigned").length,
+    completed: bookings.filter(b => b.status === "Completed").length,
+    revenue: bookings.reduce((acc, b) => acc + (b.visitingFee || 0), 0)
+  };
+
+  const appsScriptCode = `/*
+  Rapid Cool Services - Google Sheets App Script 
+  Paste this inside your Google Sheet:
+  1. Open sheets.google.com -> Create a sheet named "Rapid Cool Services Bookings"
+  2. Click Extensions -> Apps Script
+  3. Replace the entire code with the block below, save, and click "Deploy -> New Deployment"
+  4. Choose type: Web App, Execute as: Me, Who has access: Anyone
+  5. Copy the Web App Deployment URL and paste it as your "GOOGLE_SHEET_WEBHOOK_URL" in your environment variables!
+*/
+
+function doPost(e) {
+  try {
+    const data = JSON.parse(e.postData.contents);
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+    
+    if (data.action === "addBooking") {
+      // Append booking row 
+      sheet.appendRow([
+        data.id,
+        data.date,
+        data.time,
+        data.customerName,
+        "'" + data.mobileNumber, // Force string representation inside sheets
+        data.customerEmail || "N/A",
+        data.applianceType,
+        data.serviceRequired,
+        data.area,
+        data.address,
+        data.preferredDate,
+        data.status
+      ]);
+      return ContentService.createTextOutput(JSON.stringify({ success: true })).setMimeType(ContentService.MimeType.JSON);
+    }
+    
+    if (data.action === "updateBooking") {
+      const rows = sheet.getDataRange().getValues();
+      for (let i = 1; i < rows.length; i++) {
+        if (rows[i][0] === data.id) {
+          sheet.getRange(i + 1, 12).setValue(data.status); // Updates Status column
+          break;
+        }
+      }
+      return ContentService.createTextOutput(JSON.stringify({ success: true, updated: true })).setMimeType(ContentService.MimeType.JSON);
+    }
+    
+    return ContentService.createTextOutput(JSON.stringify({ success: false, error: "Invalid Action" })).setMimeType(ContentService.MimeType.JSON);
+    
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({ success: false, error: err.message })).setMimeType(ContentService.MimeType.JSON);
+  }
+}`;
+
+  const copyToClipboard = () => {
+    navigator.clipboard.writeText(appsScriptCode);
+    setCopiedCode(true);
+    setTimeout(() => setCopiedCode(false), 2000);
   };
 
   return (
-    <section id="contact" className="py-24 bg-white border-t border-gray-150">
-      <div className="container mx-auto px-6 max-w-5xl">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-start">
-          
-          {/* Column A: Contact Details */}
-          <div className="lg:col-span-5 space-y-8">
-            <div>
-              <span className="text-blue-700 text-xs font-black tracking-widest uppercase bg-blue-50 px-4 py-1.5 rounded-full inline-block mb-3 font-mono border border-blue-100">
-                Central Helpline
-              </span>
-              <h2 className="text-3xl font-extrabold text-[#011e41] tracking-tight">
-                Our Support Helplines
-              </h2>
-              <p className="text-gray-600 mt-4 text-sm leading-relaxed">
-                Need premium diagnostics in Mumbai? Ring our centralized team directly, or fill in your details on the instant doorstep scheduler.
+    <div className="bg-[#030d1a] min-h-screen text-slate-100 font-sans selection:bg-amber-500 selection:text-slate-950 relative">
+      
+      {/* Floating Real-Time Booking Alert Toast */}
+      <AnimatePresence>
+        {newBookingNotification && (
+          <motion.div
+            initial={{ opacity: 0, y: -50, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.9, y: -20 }}
+            className="fixed top-20 right-6 z-[9999] max-w-sm w-full bg-[#021329] border-2 border-amber-500 rounded-2xl p-5 shadow-2xl text-left backdrop-blur-md"
+          >
+            <div className="flex items-start justify-between">
+              <div className="flex items-center space-x-2.5">
+                <span className="flex h-3 w-3 relative">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-3 w-3 bg-rose-500"></span>
+                </span>
+                <span className="text-[10px] font-black uppercase tracking-wider text-amber-400 font-mono">
+                  🚨 LIVE WEBSITE NOTIFICATION
+                </span>
+              </div>
+              <button
+                onClick={() => setNewBookingNotification(null)}
+                className="text-slate-400 hover:text-white transition text-xs font-bold px-1.5 py-0.5 rounded bg-white/5"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="mt-3.5 space-y-1.5">
+              <p className="text-xs text-white leading-relaxed">
+                <strong>{newBookingNotification.customerName}</strong> has placed a new booking for <strong className="text-[#38bdf8]">{newBookingNotification.applianceType}</strong> in <strong className="text-white">{newBookingNotification.area}</strong>!
               </p>
+              <div className="text-[11px] text-slate-300 font-mono flex justify-between">
+                <span>Phone: +91 {newBookingNotification.mobileNumber}</span>
+                <span className="text-amber-400 font-bold">₹{newBookingNotification.visitingFee}</span>
+              </div>
             </div>
 
-            <div className="space-y-6">
-              {/* Location */}
-              <div className="flex items-start space-x-4 bg-slate-50 p-4.5 rounded-2xl border border-gray-150 shadow-sm transition-all hover:shadow-md">
-                <div className="w-12 h-12 bg-blue-900 text-white rounded-xl flex items-center justify-center text-xl shrink-0">
-                  <MapPin className="w-5 h-5 stroke-[2]" />
-                </div>
-                <div>
-                  <h4 className="font-extrabold text-[#011e41] text-base uppercase tracking-tight">Main Office Location</h4>
-                  <p className="text-gray-600 text-xs mt-1 leading-relaxed">
-                    {BRAND_CONTACT.address}
-                  </p>
-                </div>
-              </div>
+            <div className="mt-4 flex gap-2 justify-end">
+              <button
+                onClick={() => {
+                  const id = newBookingNotification.id;
+                  setNewBookingNotification(null);
+                  setSearchTerm(id);
+                }}
+                className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-[#011e41] text-[10px] font-black uppercase rounded-lg tracking-wider transition"
+              >
+                View Ticket
+              </button>
+              <button
+                onClick={() => setNewBookingNotification(null)}
+                className="px-3.5 py-1.5 bg-white/10 hover:bg-white/15 text-white text-[10px] font-bold uppercase rounded-lg transition"
+              >
+                Dismiss
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-              {/* Call Support */}
-              <div className="flex items-start space-x-4 bg-slate-50 p-4.5 rounded-2xl border border-gray-150 shadow-sm transition-all hover:shadow-md">
-                <div className="w-12 h-12 bg-[#0248a3] text-white rounded-xl flex items-center justify-center text-xl shrink-0">
-                  <Phone className="w-5 h-5 stroke-[2] fill-white" />
-                </div>
-                <div>
-                  <h4 className="font-extrabold text-[#011e41] text-base uppercase tracking-tight">Call Support Helplines</h4>
-                  <div className="text-xs mt-1.5 space-y-1 font-mono">
-                    <p className="flex items-center gap-1.5 text-blue-700">
-                      Primary Support:{" "}
-                      <a href={`tel:+91${BRAND_CONTACT.phone1}`} className="hover:underline font-black text-sm">
-                        +91 {BRAND_CONTACT.phone1}
-                      </a>
-                    </p>
-                    <p className="flex items-center gap-1.5 text-blue-700">
-                      Secondary Line:{" "}
-                      <a href={`tel:+91${BRAND_CONTACT.phone2}`} className="hover:underline font-black text-sm">
-                        +91 {BRAND_CONTACT.phone2}
-                      </a>
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Social Feed */}
-              <div className="flex items-start space-x-4 bg-slate-50 p-4.5 rounded-2xl border border-gray-150 shadow-sm transition-all hover:shadow-md">
-                <div className="w-12 h-12 bg-amber-550/10 text-amber-600 rounded-xl flex items-center justify-center text-xl shrink-0">
-                  <Mail className="w-5 h-5 stroke-[2]" />
-                </div>
-                <div>
-                  <h4 className="font-extrabold text-[#011e41] text-base uppercase tracking-tight font-sans">Social Feed</h4>
-                  <p className="text-gray-600 text-xs mt-1 font-mono">
-                    Instagram: <span className="text-[#0248a3] font-bold">{BRAND_CONTACT.instagram}</span>
-                  </p>
-                  <p className="text-[10px] text-gray-500 mt-0.5 font-sans">
-                    Email: rapidcoolservices0services@gmail.com
-                  </p>
-                </div>
-              </div>
+      {/* Header Bar */}
+      <header className="border-b border-blue-900/40 bg-[#020912]/92 sticky top-0 z-50 backdrop-blur-md">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <button 
+              onClick={onClose}
+              className="p-1.5 rounded-lg border border-slate-750 hover:bg-white/5 transition text-slate-400 hover:text-white"
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </button>
+            <div>
+              <span className="text-[9px] font-black tracking-widest text-amber-500 uppercase font-mono">
+                Rapid Cool Services
+              </span>
+              <h1 className="text-sm font-black uppercase text-white tracking-tight flex items-center">
+                <span>Central Management Dashboard</span>
+                <span className="ml-2 w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              </h1>
             </div>
           </div>
-
-          {/* Column B: Booking Form */}
-          <div className="lg:col-span-7">
-            <AnimatePresence mode="wait">
-              {!submittedBooking ? (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.95 }}
-                  transition={{ duration: 0.3 }}
-                  className="bg-white p-8 md:p-10 rounded-3xl shadow-lg border border-gray-150"
-                >
-                  <h3 className="text-2xl font-black mb-6 text-[#011e41] tracking-tight flex items-center justify-between uppercase">
-                    <span>Schedule Visit</span>
-                    <span className="text-xs bg-emerald-50 text-emerald-800 font-mono font-bold px-3 py-1 rounded-full flex items-center gap-1 border border-emerald-100">
-                      <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                      Dispatch Active
-                    </span>
-                  </h3>
-
-                  {selectedServiceId && (
-                    <div className="bg-blue-50/50 p-4.5 rounded-xl border border-blue-100 mb-6 text-xs text-blue-900">
-                      <div className="flex justify-between items-center">
-                        <div>
-                          <span className="block font-black font-mono text-blue-500 uppercase text-[9px] mb-0.5">Appliance Service selected</span>
-                          <strong className="font-extrabold text-sm text-[#011e41]">
-                            {SERVICES_LIST.find((s) => s.id === selectedServiceId)?.name}
-                          </strong>
-                          <div className="flex gap-2.5 mt-1 text-blue-800 font-bold font-mono text-[10px]">
-                            {express && <span className="text-amber-700">• Express Same-Day (+₹200)</span>}
-                            {warranty && <span className="text-emerald-700">• Parts Warranty (+₹150)</span>}
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <span className="block text-[9px] text-blue-500 font-bold uppercase font-mono">Visiting Charge Est.</span>
-                          <span className="text-lg font-black font-mono text-blue-600">₹{totalEstimate === 0 ? 499 : totalEstimate}</span>
-                        </div>
-                      </div>
-                      <div className="mt-2.5 pt-2 border-t border-blue-100/60 text-[10px] text-blue-700 font-medium">
-                        ℹ️ This visiting charge covers doorstep diagnostic inspection, and is <strong>fully adjusted & waived</strong> from your final invoice if you proceed with recommended repairs.
-                      </div>
-                    </div>
-                  )}
-
-                  {bookingError && (
-                    <div className="bg-rose-50 border border-rose-200 text-rose-800 p-4 rounded-xl text-xs font-semibold leading-relaxed mb-4 flex items-center gap-2">
-                      <span className="text-sm">⚠️</span>
-                      <span>{bookingError}</span>
-                    </div>
-                  )}
-
-                  <form onSubmit={handleBookingSubmit} className="space-y-4">
-                    <div>
-                      <label className="block text-[10px] font-extrabold text-[#011e41] uppercase tracking-wider mb-1.5">
-                        Your Full Name
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        value={fullName}
-                        onChange={(e) => setFullName(e.target.value)}
-                        placeholder="e.g., Rajesh Sharma"
-                        className="w-full p-3.5 border border-gray-200 rounded-xl bg-slate-50/50 focus:outline-none focus:ring-2 focus:ring-[#0f5fc2] focus:bg-white text-gray-900 font-bold text-sm transition-all"
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-[10px] font-extrabold text-[#011e41] uppercase tracking-wider mb-1.5">
-                          Phone Number
-                        </label>
-                        <input
-                          type="tel"
-                          required
-                          pattern="[0-9]{10}"
-                          title="Please enter a valid 10-digit mobile number"
-                          value={phoneNumber}
-                          onChange={(e) => setPhoneNumber(e.target.value)}
-                          placeholder="10-digit mobile, e.g., 9082213527"
-                          className="w-full p-3.5 border border-[#0f5fc2]/30 rounded-xl bg-slate-50/50 focus:outline-none focus:ring-2 focus:ring-[#0f5fc2] focus:bg-white text-gray-900 font-bold text-sm transition-all"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-[10px] font-extrabold text-[#011e41] uppercase tracking-wider mb-1.5">
-                          Your Email Address
-                        </label>
-                        <input
-                          type="email"
-                          required
-                          value={customerEmail}
-                          onChange={(e) => setCustomerEmail(e.target.value)}
-                          placeholder="e.g., rajesh@gmail.com"
-                          className="w-full p-3.5 border border-gray-200 rounded-xl bg-slate-50/50 focus:outline-none focus:ring-2 focus:ring-[#0f5fc2] focus:bg-white text-gray-900 font-bold text-sm transition-all"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-[10px] font-extrabold text-[#011e41] uppercase tracking-wider mb-1.5">
-                          Mumbai Suburb / Area Location
-                        </label>
-                        <select
-                          required
-                          value={selectedSuburb}
-                          onChange={(e) => setSelectedSuburb(e.target.value)}
-                          className="w-full p-3.5 border border-gray-200 rounded-xl bg-slate-50/50 focus:outline-none focus:ring-2 focus:ring-[#0f5fc2] focus:bg-white text-gray-850 font-bold text-sm transition-all"
-                        >
-                          <option value="">-- Choose Suburb --</option>
-                          {MUMBAI_SUBURBS.map((sub) => (
-                             <option key={sub} value={sub}>
-                               {sub}
-                             </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-[10px] font-extrabold text-[#011e41] uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-                          <Calendar className="w-3.5 h-3.5 text-blue-600" />
-                          <span>Preferred Visit Date</span>
-                        </label>
-                        <input
-                          type="date"
-                          required
-                          min={new Date().toISOString().split('T')[0]}
-                          value={preferredDate}
-                          onChange={(e) => setPreferredDate(e.target.value)}
-                          className="w-full p-3.5 border border-gray-200 rounded-xl bg-slate-50/50 focus:outline-none focus:ring-2 focus:ring-[#0f5fc2] focus:bg-white text-gray-900 font-bold text-sm transition-all"
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-[10px] font-extrabold text-[#011e41] uppercase tracking-wider mb-1.5">
-                        Home / Flat Doorstep Address
-                      </label>
-                      <textarea
-                        rows={2}
-                        required
-                        value={fullAddress}
-                        onChange={(e) => setFullAddress(e.target.value)}
-                        placeholder="e.g., Flat 12, BMC Colony, Near Hera Panna Mall, Oshiwara, Andheri West"
-                        className="w-full p-3.5 border border-gray-200 rounded-xl bg-slate-50/50 focus:outline-none focus:ring-2 focus:ring-[#0f5fc2] focus:bg-white text-gray-900 font-bold text-sm transition-all resize-none"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-[10px] font-extrabold text-[#011e41] uppercase tracking-wider mb-1.5">
-                        Additional Notes / Request details
-                      </label>
-                      <input
-                        type="text"
-                        value={additionalNotes}
-                        onChange={(e) => setAdditionalNotes(e.target.value)}
-                        placeholder="e.g. AC cooling is low, please bring gas testing equipment"
-                        className="w-full p-3.5 border border-gray-200 rounded-xl bg-slate-50/50 focus:outline-none focus:ring-2 focus:ring-[#0f5fc2] focus:bg-white text-gray-900 font-bold text-sm transition-all"
-                      />
-                    </div>
-
-                    <div className="space-y-3 pt-1 pb-1">
-                      <span className="block text-[10px] font-extrabold text-[#011e41] uppercase tracking-wider">
-                        Premium Add-ons (Optional)
-                      </span>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                        <div
-                          onClick={() => setExpress(!express)}
-                          className={`flex items-start space-x-3 p-3.5 rounded-xl border transition-all cursor-pointer ${
-                            express
-                              ? "bg-blue-50/50 border-blue-400 text-blue-900"
-                              : "bg-slate-50/30 border-gray-200 hover:border-gray-300"
-                          }`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={express}
-                            onChange={(e) => setExpress(e.target.checked)}
-                            onClick={(e) => e.stopPropagation()}
-                            className="w-4 h-4 text-[#0f5fc2] border-gray-300 rounded focus:ring-blue-500 mt-0.5 cursor-pointer"
-                          />
-                          <div>
-                            <span className="block font-black text-xs text-gray-900 leading-none">Express Same-Day (+₹200)</span>
-                            <span className="text-[10px] text-gray-500 mt-1 block">Priority engineer dispatch</span>
-                          </div>
-                        </div>
-
-                        <div
-                          onClick={() => setWarranty(!warranty)}
-                          className={`flex items-start space-x-3 p-3.5 rounded-xl border transition-all cursor-pointer ${
-                            warranty
-                              ? "bg-blue-50/50 border-blue-400 text-blue-900"
-                              : "bg-slate-50/30 border-gray-200 hover:border-gray-300"
-                          }`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={warranty}
-                            onChange={(e) => setWarranty(e.target.checked)}
-                            onClick={(e) => e.stopPropagation()}
-                            className="w-4 h-4 text-[#0f5fc2] border-gray-300 rounded focus:ring-blue-500 mt-0.5 cursor-pointer"
-                          />
-                          <div>
-                            <span className="block font-black text-xs text-gray-900 leading-none">Parts Warranty (+₹150)</span>
-                            <span className="text-[10px] text-gray-500 mt-1 block">90-Day Guarantee</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <button
-                      type="submit"
-                      disabled={bookingLoading}
-                      className="w-full bg-[#0f5fc2] text-white py-4 rounded-xl font-bold uppercase text-xs tracking-wider hover:bg-[#0248a3] transition shadow-lg shadow-blue-100 hover:shadow-xl hover:translate-y-[-1px] cursor-pointer flex items-center justify-center space-x-2 disabled:opacity-60"
-                    >
-                      {bookingLoading ? (
-                        <span>Processing with System...</span>
-                      ) : (
-                        <>
-                          <span>Confirm Doorstep Booking</span>
-                          <ArrowRight className="w-4 h-4" />
-                        </>
-                      )}
-                    </button>
-                  </form>
-                </motion.div>
-              ) : (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.95 }}
-                  className="bg-[#011e41] text-white p-8 md:p-10 rounded-3xl shadow-xl border border-blue-900 text-center relative overflow-hidden"
-                >
-                  <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-amber-500 via-[#38bdf8] to-emerald-500 animate-pulse" />
-                  
-                  <div className="w-16 h-16 bg-emerald-500/15 text-emerald-400 rounded-2xl flex items-center justify-center mx-auto mb-6 text-3xl">
-                    <CheckCircle2 className="w-10 h-10 stroke-[2.5]" />
-                  </div>
-
-                  <h3 className="text-2xl font-black text-white tracking-tight mb-2 uppercase">
-                    Booking Confirmed!
-                  </h3>
-                  <p className="text-slate-300 text-xs mb-6 max-w-md mx-auto leading-relaxed">
-                    We have specialists active near <strong>{submittedBooking.suburb}</strong>. An engineer will contact you on <strong>+91 {submittedBooking.phone}</strong> in under 15 minutes.
-                  </p>
-
-                  <div className="bg-blue-950/80 rounded-2xl p-6 mb-8 text-left border border-blue-900/60 font-sans space-y-3.5 text-sm">
-                    <div className="flex justify-between items-center pb-3 border-b border-blue-900/40">
-                      <span className="text-blue-300 text-[10px] uppercase font-bold tracking-widest font-mono">Reference Ticket ID</span>
-                      <strong className="text-amber-400 font-black font-mono tracking-wider">{submittedBooking.id}</strong>
-                    </div>
-
-                    <div className="flex justify-between">
-                      <span className="text-slate-350">Customer Name:</span>
-                      <span className="text-white font-extrabold">{submittedBooking.name}</span>
-                    </div>
-
-                    <div className="flex justify-between">
-                      <span className="text-slate-350">Selected Appliance:</span>
-                      <span className="text-blue-300 font-bold">{submittedBooking.appliance}</span>
-                    </div>
-
-                    <div className="flex justify-between">
-                      <span className="text-slate-350">Mumbai Suburb:</span>
-                      <span className="text-slate-200 font-bold">{submittedBooking.suburb}</span>
-                    </div>
-
-                    <div className="flex justify-between pt-3 border-t border-blue-900/40">
-                      <span className="text-blue-300 font-extrabold uppercase text-xs font-mono">Estimated Invoice Rate:</span>
-                      <span className="text-white font-black text-lg">₹{submittedBooking.totalPrice}</span>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                    <button
-                      onClick={() => setSubmittedBooking(null)}
-                      className="px-6 py-3 bg-[#0a3263] text-white font-extrabold rounded-xl hover:bg-[#0248a3] transition text-xs uppercase tracking-wider cursor-pointer"
-                    >
-                      Book Another Service
-                    </button>
-                    <a
-                      href={`tel:+91${BRAND_CONTACT.phone1}`}
-                      className="px-6 py-3 bg-amber-500 text-blue-950 font-black rounded-xl hover:bg-amber-600 transition text-xs uppercase tracking-wider flex items-center justify-center gap-1.5"
-                    >
-                      <Phone className="w-3.5 h-3.5 animate-bounce" />
-                      <span>Call helpline now</span>
-                    </a>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            {bookingsList.length > 0 && (
-              <div className="mt-10 bg-slate-50 rounded-2xl border border-gray-150 p-6 shadow-sm">
-                <div className="flex justify-between items-center mb-4">
-                  <h4 className="font-extrabold text-gray-900 text-sm tracking-wide flex items-center space-x-2">
-                    <ClipboardList className="w-4.5 h-4.5 text-blue-600" />
-                    <span>Scheduled Bookings ({bookingsList.length})</span>
-                  </h4>
-                  <span className="text-[10px] bg-white border border-gray-150 text-slate-550 font-mono font-black px-2 py-0.5 rounded">
-                    PERSISTED DATABASE
-                  </span>
-                </div>
-
-                <div className="space-y-3 max-h-60 overflow-y-auto pr-1">
-                  {bookingsList.map((book) => (
-                    <div
-                      key={book.id}
-                      className="p-4 bg-white rounded-xl border border-gray-150 text-xs flex justify-between items-start shadow-xs"
-                    >
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <strong className="text-gray-900 font-extrabold uppercase">{book.appliance}</strong>
-                          <span className="text-[10px] text-blue-600 font-mono font-bold uppercase">{book.id}</span>
-                        </div>
-                        <p className="text-gray-550 mt-1">
-                          Suburb: <strong className="text-gray-700">{book.suburb}</strong> • Logged: {book.time}
-                        </p>
-                        <div className="flex gap-2 mt-1.5">
-                          {book.express && (
-                            <span className="bg-amber-50 text-amber-700 border border-amber-150 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase">
-                              Same-Day Priority
-                            </span>
-                          )}
-                          {book.warranty && (
-                            <span className="bg-emerald-50 text-emerald-700 border border-emerald-150 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase">
-                              Warranty Secured
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="text-right flex flex-col items-end space-y-1.5">
-                        <strong className="text-gray-900 font-black text-sm">₹{book.totalPrice}</strong>
-                        <button
-                          onClick={() => deleteBooking(book.id)}
-                          className="p-1 bg-red-50 text-red-600 rounded hover:bg-red-100 hover:text-red-700 transition"
-                          title="Cancel/Remove Booking"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
+          
+          <div className="flex items-center space-x-3">
+            {isAuthenticated && (
+              <button
+                onClick={handleLogout}
+                className="bg-transparent border border-rose-900 text-rose-400 hover:bg-rose-950/20 px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center space-x-1.5 cursor-pointer"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Logout Session</span>
+              </button>
             )}
+            <button
+              onClick={onClose}
+              className="bg-white/10 hover:bg-white/15 text-white px-3.5 py-1.5 rounded-lg text-xs font-black transition cursor-pointer"
+            >
+              EXIT ADMIN
+            </button>
           </div>
-
         </div>
-      </div>
-    </section>
+      </header>
+
+      {/* Main Container */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
+        
+        {/* LOGIN GATE SCREEN */}
+        {!isAuthenticated ? (
+          <div className="max-w-md mx-auto py-16">
+            <div className="bg-[#021329]/80 border border-blue-900/50 rounded-2xl p-8 shadow-2xl space-y-6">
+              <div className="text-center space-y-2">
+                <div className="w-14 h-14 bg-amber-500/10 text-amber-400 border border-amber-500/30 rounded-2xl flex items-center justify-center mx-auto text-2xl">
+                  <Lock className="w-6 h-6 stroke-[2]" />
+                </div>
+                <h2 className="text-xl font-extrabold uppercase tracking-tight text-white mt-4">
+                  Admin Sign-In
+                </h2>
+                <p className="text-xs text-slate-400 leading-relaxed max-w-xs mx-auto">
+                  Owner dashboard is securely protected. Please sign in using the Rapid Cool administrative credentials.
+                </p>
+              </div>
+
+              {loginError && (
+                <div className="bg-red-950/30 border border-red-900/50 text-red-400 p-3.5 rounded-xl text-xs font-semibold leading-relaxed flex items-center space-x-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  <span>{loginError}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleLogin} className="space-y-4 text-left">
+                <div>
+                  <label className="block text-[9px] font-black uppercase text-slate-400 tracking-wider mb-1 font-mono">
+                    Admin Username
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. admin"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    className="w-full bg-[#010c1c] border border-blue-900/60 rounded-xl py-3 px-4 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[9px] font-black uppercase text-slate-400 tracking-wider mb-1 font-mono">
+                    Security Password
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    placeholder="••••••••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full bg-[#010c1c] border border-blue-900/60 rounded-xl py-3 px-4 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 font-bold"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loadingLogin}
+                  className="w-full bg-amber-500 hover:bg-amber-600 text-[#011e41] py-3.5 rounded-xl font-black text-xs uppercase tracking-widest transition shadow-lg mt-2 flex items-center justify-center space-x-2 disabled:opacity-50"
+                >
+                  {loadingLogin ? (
+                    <span>Authenticating System...</span>
+                  ) : (
+                    <>
+                      <Lock className="w-4 h-4" />
+                      <span>Authenticate Securely</span>
+                    </>
+                  )}
+                </button>
+              </form>
+
+              <div className="text-center pt-2">
+                <button
+                  onClick={onClose}
+                  className="text-xs text-slate-500 hover:text-slate-350 transition flex items-center justify-center gap-1 mx-auto"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                  Return plain web store
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          /* ACTUAL ADMINISTRATIVE USER WORKSPACE */
+          <div className="space-y-8">
+            
+            {/* 1. Quick Stats Grid */}
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+              
+              <div className="bg-[#021329]/60 border border-blue-900/30 rounded-xl p-4.5 space-y-1">
+                <span className="text-[9px] font-mono font-bold uppercase text-slate-400 block">Total Tickets</span>
+                <span className="text-2xl font-black text-white block">{stats.total}</span>
+                <span className="text-[10px] text-slate-400 font-mono">Registered in local cache</span>
+              </div>
+
+              <div className="bg-[#021329]/60 border border-blue-900/30 rounded-xl p-4.5 space-y-1">
+                <span className="text-[9px] font-mono font-bold uppercase text-amber-400 block">⚡ New Bookings</span>
+                <span className="text-2xl font-black text-amber-400 block">{stats.new}</span>
+                <span className="text-[10px] text-slate-400 font-mono">Awaiting dispatch</span>
+              </div>
+
+              <div className="bg-[#021329]/60 border border-blue-900/30 rounded-xl p-4.5 space-y-1">
+                <span className="text-[9px] font-mono font-bold uppercase text-blue-400 block">🛠️ Assigned Active</span>
+                <span className="text-2xl font-black text-blue-400 block">{stats.assigned}</span>
+                <span className="text-[10px] text-slate-400 font-mono">Technicians en route</span>
+              </div>
+
+              <div className="bg-[#021329]/60 border border-blue-900/30 rounded-xl p-4.5 space-y-1">
+                <span className="text-[9px] font-mono font-bold uppercase text-emerald-400 block">✓ Completed</span>
+                <span className="text-2xl font-black text-emerald-400 block">{stats.completed}</span>
+                <span className="text-[10px] text-slate-400 font-mono">Invoices finalised</span>
+              </div>
+
+              <div className="bg-[#021329]/60 border border-amber-500/20 rounded-xl p-4.5 space-y-1 col-span-2 md:col-span-1">
+                <span className="text-[9px] font-mono font-bold uppercase text-amber-500 block">Visiting Escrow</span>
+                <span className="text-2xl font-black text-amber-500 block">₹{stats.revenue}</span>
+                <span className="text-[10px] text-slate-400 font-mono">Waived on final repair</span>
+              </div>
+
+            </div>
+
+            {/* 2. Admin Quick Guide & Google Sheet Config */}
+            <div className="bg-[#011e41]/50 border border-blue-900/50 rounded-2xl p-6 space-y-4">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div className="space-y-1 text-left">
+                  <div className="flex items-center gap-2 text-amber-500">
+                    <FileSpreadsheet className="w-5 h-5 text-amber-400" />
+                    <span className="text-xs font-black tracking-wider uppercase font-mono">
+                      Google Sheets Integration Connected
+                    </span>
+                  </div>
+                  <h3 className="text-base font-extrabold text-white">
+                    Need to link a dynamic Google Sheet spreadsheet for live sync?
+                  </h3>
+                  <p className="text-xs text-slate-300 max-w-2xl leading-relaxed">
+                    Keep your Excel Sheets up to date automatically! We support appending real bookings as fresh rows directly into your selected Google Sheet via our secure lightweight micro-Apps Script.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setShowSheetCode(!showSheetCode)}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-[11px] rounded-lg uppercase tracking-wider transition cursor-pointer"
+                  >
+                    {showSheetCode ? "Hide Instruction Script" : "Reveal Google Script"}
+                  </button>
+                </div>
+              </div>
+
+              <AnimatePresence>
+                {showSheetCode && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="overflow-hidden space-y-3 pt-4 border-t border-blue-900/40"
+                  >
+                    <div className="text-xs text-left text-slate-300 space-y-1.5 bg-slate-950 p-4 rounded-xl border border-blue-900/30">
+                      <p><strong>Step 1:</strong> Go to <a href="https://sheets.google.com" target="_blank" rel="noreferrer" className="text-amber-400 underline font-bold">sheets.google.com</a> and build a spreadsheet with the name <strong>"Rapid Cool Services Bookings"</strong>.</p>
+                      <p><strong>Step 2:</strong> In the upper menu, go to <strong>Extensions ➔ Apps Script</strong>.</p>
+                      <p><strong>Step 3:</strong> Paste the code block below, replacing any template code there perfectly.</p>
+                      <p><strong>Step 4:</strong> Click <strong>Deploy ➔ New Deployment</strong>. Choose <strong>Web App</strong>, change Who has access to <strong>"Anyone"</strong>, execute as <strong>"Me"</strong>, and click Deploy.</p>
+                      <p><strong>Step 5:</strong> Copy the output Web App URL and add it to your <code>.env.example / server</code> environment secrets as <code>GOOGLE_SHEET_WEBHOOK_URL</code>.</p>
+                    </div>
+
+                    <div className="relative">
+                      <pre className="text-[10px] text-slate-300 overflow-x-auto text-left bg-slate-950 p-4.5 rounded-xl border border-blue-900/60 font-mono leading-relaxed max-h-72">
+                        {appsScriptCode}
+                      </pre>
+                      <button
+                        onClick={copyToClipboard}
+                        className="absolute top-3 right-3 bg-white/10 hover:bg-white/15 text-white p-2 rounded-lg text-xs font-bold transition flex items-center space-x-1.5 bubble-button"
+                        title="Copy Apps Script to clipboard"
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                        <span>{copiedCode ? "Copied!" : "Copy Code"}</span>
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            {/* 3. Search & Operational Filters Panel */}
+            <div className="bg-[#020d1c]/80 border border-blue-900/30 rounded-2xl p-5 space-y-4">
+              <div className="flex flex-col md:flex-row gap-4 items-center justify-between text-left">
+                
+                {/* Search Term input */}
+                <div className="relative w-full md:w-80">
+                  <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
+                    <Search className="w-4 h-4" />
+                  </span>
+                  <input
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="Search ID, name, number, address..."
+                    className="w-full bg-slate-950 border border-blue-900/50 rounded-xl py-2 px-10 text-xs placeholder-slate-500 focus:outline-none focus:border-blue-500 font-bold"
+                  />
+                </div>
+
+                {/* Suburb Selector */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 w-full md:w-auto">
+                  <div>
+                    <select
+                      value={suburbFilter}
+                      onChange={(e) => setSuburbFilter(e.target.value)}
+                      className="w-full bg-slate-950 border border-blue-900/50 rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-amber-500 font-bold cursor-pointer text-slate-300"
+                    >
+                      <option value="">All Mumbai Suburbs</option>
+                      {MUMBAI_SUBURBS.map(sub => (
+                        <option key={sub} value={sub}>{sub}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Status Selector */}
+                  <div>
+                    <select
+                      value={statusFilter}
+                      onChange={(e) => setStatusFilter(e.target.value)}
+                      className="w-full bg-slate-950 border border-blue-900/50 rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-amber-500 font-bold cursor-pointer text-slate-300"
+                    >
+                      <option value="">All Statuses</option>
+                      <option value="New">🚨 New</option>
+                      <option value="Assigned">🛠️ Assigned</option>
+                      <option value="Completed">✓ Completed</option>
+                    </select>
+                  </div>
+
+                  {/* Export CSV CTA */}
+                  <div className="col-span-2 sm:col-span-1">
+                    <button
+                      onClick={triggerCSVDownload}
+                      className="w-full py-2 bg-amber-500 hover:bg-amber-600 text-[#011e41] text-xs font-black uppercase rounded-xl tracking-wider transition-all flex items-center justify-center space-x-1.5 cursor-pointer"
+                    >
+                      <FileSpreadsheet className="w-3.5 h-3.5 stroke-[2.5]" />
+                      <span>Export to CSV</span>
+                    </button>
+                  </div>
+
+                </div>
+
+              </div>
+            </div>
+
+            {/* 4. Live Table View / Mobile Cards Container */}
+            <div className="bg-[#021329]/20 border border-blue-900/20 rounded-2xl overflow-hidden shadow-2xl">
+              
+              <div className="bg-slate-950/60 py-3.5 px-6 border-b border-blue-900/30 flex items-center justify-between">
+                <span className="text-xs uppercase font-black tracking-widest text-[#38bdf8] font-mono">
+                  Active Dispatch Database ({filteredBookings.length} bookings listed)
+                </span>
+                <button
+                  onClick={() => fetchBookings()}
+                  disabled={isRefreshing}
+                  className="p-1 text-slate-400 hover:text-white transition cursor-pointer"
+                  title="Reload Live Database"
+                >
+                  <RefreshCw className={`w-4 h-4 ${isRefreshing ? "animate-spin" : ""}`} />
+                </button>
+              </div>
+
+              {isLoading ? (
+                <div className="text-center py-20 text-slate-400 space-y-3 font-mono">
+                  <RefreshCw className="w-8 h-8 animate-spin mx-auto text-amber-500" />
+                  <p className="text-xs">Gathering rapid cool bookings cache...</p>
+                </div>
+              ) : filteredBookings.length === 0 ? (
+                <div className="text-center py-20 text-slate-500 text-xs font-mono space-y-2">
+                  <p>🔍 No bookings found matching the selected search query or category filters.</p>
+                  <button 
+                    onClick={() => { setSearchTerm(""); setStatusFilter(""); setSuburbFilter(""); }}
+                    className="text-amber-500 hover:underline font-bold"
+                  >
+                    Reset Filter Query Settings
+                  </button>
+                </div>
+              ) : (
+                /* Desktop Table Layout View */
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse font-sans text-xs min-w-[1000px]">
+                    <thead>
+                      <tr className="bg-slate-950/90 text-slate-400 border-b border-blue-900/30">
+                        <th className="py-4.5 px-6 font-mono font-black uppercase tracking-wider text-[10px]">Reference Ticket</th>
+                        <th className="py-4.5 px-5 font-black uppercase tracking-wider text-[10px]">Customer Details</th>
+                        <th className="py-4.5 px-5 font-black uppercase tracking-wider text-[10px]">Appliance & Service</th>
+                        <th className="py-4.5 px-5 font-black uppercase tracking-wider text-[10px]">Doorstep Address</th>
+                        <th className="py-4.5 px-4 font-black uppercase tracking-wider text-[10px]">Status Tracker</th>
+                        <th className="py-4.5 px-4 font-black uppercase tracking-wider text-[10px] text-right">Escrow Cost</th>
+                        <th className="py-4.5 px-5 font-black uppercase tracking-wider text-[10px] text-center">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-blue-900/10">
+                      {filteredBookings.map((b) => (
+                        <tr key={b.id} className="hover:bg-blue-950/20 bg-slate-950/10 transition">
+                          {/* Col 1: Ticket References */}
+                          <td className="py-4 px-6 items-start font-mono text-left">
+                            <strong className="block text-amber-400 text-sm font-black tracking-wider">{b.id}</strong>
+                            <span className="block text-[10px] text-slate-400 mt-1">{b.date} • {b.time}</span>
+                            <span className="block text-[9px] text-[#38bdf8] font-bold mt-1 uppercase">Pref: {b.preferredDate}</span>
+                          </td>
+
+                          {/* Col 2: Customer Name, Email, Phone */}
+                          <td className="py-4 px-5">
+                            <strong className="block text-white text-sm font-extrabold">{b.customerName}</strong>
+                            <div className="flex items-center space-x-1 text-slate-350 mt-1 font-mono font-bold">
+                              <Phone className="w-3 h-3 text-amber-500 shrink-0" />
+                              <span>+91 {b.mobileNumber}</span>
+                            </div>
+                            {b.customerEmail && (
+                              <span className="block text-[10px] text-slate-400 truncate max-w-[160px] font-mono mt-1">{b.customerEmail}</span>
+                            )}
+                          </td>
+
+                          {/* Col 3: Service details */}
+                          <td className="py-4 px-5">
+                            <strong className="block text-[#38bdf8] text-[13px] font-black uppercase">{b.applianceType}</strong>
+                            <span className="block text-slate-300 mt-1 font-medium">{b.serviceRequired}</span>
+                            <div className="flex gap-1.5 mt-2">
+                              {b.express && (
+                                <span className="bg-amber-500/10 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wide">
+                                  ⚡ EXPRESS
+                                </span>
+                              )}
+                              {b.warranty && (
+                                <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wide">
+                                  🛡️ 90D PARTS
+                                </span>
+                              )}
+                            </div>
+                          </td>
+
+                          {/* Col 4: Location Address */}
+                          <td className="py-4 px-5 max-w-xs">
+                            <div className="flex items-start space-x-1">
+                              <MapPin className="w-3.5 h-3.5 text-rose-500 shrink-0 mt-0.5" />
+                              <div>
+                                <strong className="text-white text-xs block">{b.area}</strong>
+                                <p className="text-slate-400 text-[11px] mt-1 leading-relaxed line-clamp-3">
+                                  {b.address}
+                                </p>
+                              </div>
+                            </div>
+                            {b.additionalNotes && (
+                              <div className="text-[10px] text-amber-300 italic font-medium mt-1 bg-amber-500/5 p-1 rounded-lg border border-amber-500/10">
+                                Note: {b.additionalNotes}
+                              </div>
+                            )}
+                          </td>
+
+                          {/* Col 5: Dropdown Status update control */}
+                          <td className="py-4 px-4 font-mono">
+                            <div className="space-y-1.5">
+                              <select
+                                value={b.status}
+                                onChange={(e) => updateBookingStatus(b.id, e.target.value as any)}
+                                className={`text-[10px] font-black uppercase tracking-wider py-1.5 px-2.5 rounded-lg border focus:outline-none cursor-pointer ${
+                                  b.status === "New" 
+                                    ? "bg-amber-500/15 text-amber-400 border-amber-500/30" 
+                                    : b.status === "Assigned"
+                                    ? "bg-blue-500/15 text-blue-400 border-blue-500/30"
+                                    : "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
+                                }`}
+                              >
+                                <option value="New" className="bg-[#030d1a] font-black text-amber-400">🚨 New Request</option>
+                                <option value="Assigned" className="bg-[#030d1a] font-black text-blue-400">🛠️ Assigned</option>
+                                <option value="Completed" className="bg-[#030d1a] font-black text-emerald-400">✓ Completed</option>
+                              </select>
+                            </div>
+                          </td>
+
+                          {/* Col 6: Price costs */}
+                          <td className="py-4 px-4 text-right font-mono">
+                            <strong className="text-white font-black text-sm">₹{b.visitingFee}</strong>
+                            <span className="block text-[9px] text-slate-400 mt-1">Visit Escrow</span>
+                          </td>
+
+                          {/* Col 7: Actions */}
+                          <td className="py-4 px-5 text-center">
+                            <div className="flex items-center justify-center gap-2">
+                              <a
+                                href={`https://wa.me/91${b.mobileNumber}?text=Hello%20${encodeURIComponent(b.customerName)},%20this%20is%20Rapid%20Cool%20Services%20Mumbai.%20We%20received%20your%20booking%20for%20${encodeURIComponent(b.applianceType)}%20(ID:%20${b.id}).%20Our%20certified%20technician%20is%20dispatched%20to%20your%20address%20in%20${encodeURIComponent(b.area)}.%20Please%20verify%20if%20you%20are%20available%20now.`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="p-1 px-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[9px] font-black uppercase tracking-wider flex items-center space-x-1 transition"
+                                title="Instantly coordinate with homeowner on WhatsApp"
+                              >
+                                <MessageSquare className="w-3 h-3 fill-white" />
+                                <span>WhatsApp Customer</span>
+                              </a>
+
+                              <button
+                                onClick={() => deleteBookingRecord(b.id)}
+                                className="p-1.5 bg-rose-950/25 text-rose-450 border border-rose-900/40 rounded-lg hover:bg-rose-900 hover:text-white transition"
+                                title="Remove reservation permanently"
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+            </div>
+
+          </div>
+        )}
+
+      </main>
+    </div>
   );
 }
