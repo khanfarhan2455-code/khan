@@ -35,7 +35,7 @@ export const BRAND_CONTACT = {
   phone2: "9867484296",
   address: "BB-12 BMC Colony, Near Hera Panna Mall, Oshiwara, Andheri West, Mumbai - 400102",
   instagram: "@rapidcool.services",
-  email: "support@rapidcoolservices.com",
+  email: "rapidcool0services@gmail.com",
 };
 
 export const SERVICES_LIST = [
