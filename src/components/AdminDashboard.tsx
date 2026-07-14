@@ -1,806 +1,365 @@
-import { useState, useEffect, FormEvent } from "react";
+import React, { useState, useEffect } from "react";
 import { 
-  Lock, Search, Filter, RefreshCw, LogOut, CheckCircle, Wrench, Clock, FileSpreadsheet, 
-  ChevronRight, Phone, MessageSquare, MapPin, Calendar, HelpCircle, Copy, AlertTriangle, ArrowLeft
+  ClipboardList, 
+  Trash2, 
+  RefreshCw, 
+  Search, 
+  Filter, 
+  Download, 
+  CheckCircle, 
+  Clock, 
+  TrendingUp, 
+  MapPin 
 } from "lucide-react";
-import { MUMBAI_SUBURBS, SERVICES_LIST } from "../data";
-import { motion, AnimatePresence } from "motion/react";
 
-// ==========================================
-// 💡 LIVE PRODUCTION BACKEND CONFIGURATION
-// ==========================================
-const API_BASE_URL = "https://rapidcool-new-backend.onrender.com";
-
-interface AdminBooking {
-  id: string;
-  date: string;
-  time: string;
-  customerName: string;
-  mobileNumber: string;
-  customerEmail: string;
-  applianceType: string;
-  serviceRequired: string;
-  area: string;
+// Types definition
+interface Booking {
+  _id?: string;
+  id?: string;
+  name: string;
+  phone: string;
+  email?: string;
+  suburb: string;
   address: string;
-  preferredDate: string;
-  additionalNotes: string;
-  status: "New" | "Assigned" | "Completed";
-  express: boolean;
-  warranty: boolean;
-  visitingFee: number;
-  deliveryTries?: {
-    emailAdmin: number;
-    emailCustomer: number;
-    sheets: number;
-    whatsapp: number;
-  };
-  errors?: string[];
+  date: string;
+  appliance: string;
+  notes?: string;
+  status?: string;
+  express?: boolean;
+  warranty?: boolean;
+  visitingFee?: number;
 }
 
-export default function AdminDashboard({ onClose }: { onClose: () => void }) {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [loginError, setLoginError] = useState("");
-  const [loadingLogin, setLoadingLogin] = useState(false);
+export default function AdminDashboard() {
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+  
+  // Filters and Search states
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedSuburb, setSelectedSuburb] = useState("All");
+  const [selectedStatus, setSelectedStatus] = useState("All");
 
-  // Dashboard Data State
-  const [bookings, setBookings] = useState<AdminBooking[]>([]);
-  const [newBookingNotification, setNewBookingNotification] = useState<AdminBooking | null>(null);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [suburbFilter, setSuburbFilter] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
-  const [dateFilter, setDateFilter] = useState("");
-  const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-
-  // Sheet Integration Guide Tab
-  const [showSheetCode, setShowSheetCode] = useState(false);
-  const [copiedCode, setCopiedCode] = useState(false);
-
-  // Live chime sound trigger using native Web Audio synthesizer (no assets required)
-  const playChime = () => {
+  // 🟢 Live Fetch Database function
+  const fetchLiveBookings = async () => {
     try {
-      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-      if (!AudioCtx) return;
-      const ctx = new AudioCtx();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
+      setLoading(true);
+      setError(null);
       
-      osc.type = "sine";
-      osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5 chime start
-      osc.frequency.setValueAtTime(880, ctx.currentTime + 0.15); // A5 chime peak
+      const response = await fetch("https://rapidcool-new-backend.onrender.com/api/bookings");
       
-      gain.gain.setValueAtTime(0.12, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch database data (${response.status})`);
+      }
       
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start();
-      osc.stop(ctx.currentTime + 0.4);
-    } catch (e) {
-      console.log("Subtle audio notification blocked by browser autoplay policy.");
-    }
-  };
-
-  const fetchBookings = async (isSilent = false) => {
-    if (!isSilent) setIsRefreshing(true);
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/bookings`);
-      if (response.ok) {
-        const resData = await response.json();
-        const freshList: AdminBooking[] = resData.bookings || [];
-        
-        // If it is a background silent check and we already have some bookings loaded
-        if (isSilent && bookings.length > 0) {
-          const existingIds = new Set(bookings.map(b => b.id));
-          const trulyNew = freshList.filter(b => !existingIds.has(b.id));
-          
-          if (trulyNew.length > 0) {
-            // Trigger beautiful real-time toast alert & audio chime
-            setNewBookingNotification(trulyNew[0]);
-            playChime();
-          }
+      const data = await response.json();
+      
+      // Agar API response format main array ke andar 'bookings' keys hai ya direct array hai:
+      const bookingsArray = Array.isArray(data) ? data : (data.bookings || []);
+      setBookings(bookingsArray);
+      
+    } catch (err: any) {
+      console.warn("Backend API unreachable. Fallback to localStorage:", err);
+      setError("Live connection failed. Displaying local offline records.");
+      
+      // Local cache backup fetch
+      const saved = localStorage.getItem("rapid_cool_bookings");
+      if (saved) {
+        try {
+          setBookings(JSON.parse(saved));
+        } catch (e) {
+          console.error("Local parsing failed", e);
         }
-        setBookings(freshList);
       }
-    } catch (error) {
-      console.error("Failed to query bookings:", error);
     } finally {
-      if (!isSilent) {
-        setIsLoading(false);
-        setIsRefreshing(false);
-      }
+      setLoading(false);
     }
   };
 
-// Load Session on start
   useEffect(() => {
-    const savedToken = localStorage.getItem("rapid_cool_admin_token");
-    if (savedToken) {
-      setIsAuthenticated(true);
-      fetchBookings();
-    } else {
-      setIsLoading(false);
-    }
+    fetchLiveBookings();
   }, []);
 
-  // Set up 10-second polling interval when admin is active
-  useEffect(() => {
-    if (!isAuthenticated) return;
-    
-    const interval = setInterval(() => {
-      fetchBookings(true);
-    }, 10000);
-    
-    return () => clearInterval(interval);
-  }, [isAuthenticated, bookings]);
-
-  const handleLogin = async (e: FormEvent) => {
-    e.preventDefault();
-    setLoginError("");
-    setLoadingLogin(true);
-
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/admin/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
-      });
-
-      const resData = await response.json();
-      if (response.ok && resData.success) {
-        localStorage.setItem("rapid_cool_admin_token", resData.token);
-        setIsAuthenticated(true);
-        fetchBookings();
-      } else {
-        setLoginError(resData.error || "Incorrect admin credentials.");
-      }
-    } catch (e) {
-      setLoginError("Failed to authenticate with system server. Please make sure the backend is active.");
-    } finally {
-      setLoadingLogin(false);
-    }
-  };
-  const handleLogout = () => {
-    localStorage.removeItem("rapid_cool_admin_token");
-    setIsAuthenticated(false);
-    setBookings([]);
-  };
-
-  const updateBookingStatus = async (id: string, newStatus: "New" | "Assigned" | "Completed") => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/bookings/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: newStatus }),
-      });
-
-      if (response.ok) {
-        setBookings(prev =>
-          prev.map(b => (b.id === id ? { ...b, status: newStatus } : b))
-        );
-      }
-    } catch (e) {
-      alert("Error updating booking status.");
-    }
-  };
-
-  const deleteBookingRecord = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this booking permanently from the database?")) return;
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/bookings/${id}`, { method: "DELETE" });
-      if (response.ok) {
-        setBookings(prev => prev.filter(b => b.id !== id));
-      }
-    } catch (e) {
-      alert("Failed to delete booking.");
-    }
-  };
-
-  // CSV Export trigger
-  const triggerCSVDownload = () => {
-    window.open(`${API_BASE_URL}/api/bookings/export`, "_blank");
-  };
-
-  // Filter Bookings logic client side for ultra responsive feedback
-  const filteredBookings = bookings.filter((b) => {
+  // Filter & Search logic
+  const filteredBookings = bookings.filter((booking) => {
     const matchesSearch = 
-      b.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      b.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      b.mobileNumber.includes(searchTerm) ||
-      b.address.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const matchesSuburb = suburbFilter === "" || b.area === suburbFilter;
-    const matchesStatus = statusFilter === "" || b.status === statusFilter;
-    const matchesDate = dateFilter === "" || b.preferredDate === dateFilter;
+      booking.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      booking.phone.includes(searchQuery) ||
+      booking.appliance.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (booking.id && booking.id.toLowerCase().includes(searchQuery.toLowerCase()));
 
-    return matchesSearch && matchesSuburb && matchesStatus && matchesDate;
+    const matchesSuburb = selectedSuburb === "All" || booking.suburb === selectedSuburb;
+    
+    const bookingStatus = booking.status || "Pending";
+    const matchesStatus = selectedStatus === "All" || bookingStatus === selectedStatus;
+
+    return matchesSearch && matchesSuburb && matchesStatus;
   });
 
-  // Calculate quick metrics
-  const stats = {
-    total: bookings.length,
-    new: bookings.filter(b => b.status === "New").length,
-    assigned: bookings.filter(b => b.status === "Assigned").length,
-    completed: bookings.filter(b => b.status === "Completed").length,
-    revenue: bookings.reduce((acc, b) => acc + (b.visitingFee || 0), 0)
+  // Export dynamically to CSV
+  const exportToCSV = () => {
+    if (filteredBookings.length === 0) return;
+    const headers = ["Ticket ID", "Name", "Phone", "Suburb", "Address", "Appliance", "Date", "Status", "Amount"];
+    const rows = filteredBookings.map(b => [
+      b.id || b._id || "N/A",
+      b.name,
+      b.phone,
+      b.suburb,
+      b.address.replace(/,/g, " "),
+      b.appliance,
+      b.date,
+      b.status || "Pending",
+      b.visitingFee || 499
+    ]);
+
+    const csvContent = "data:text/csv;charset=utf-8," 
+      + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
+    
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `Rapid_Cool_Bookings_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
-  const appsScriptCode = `/*
-  Rapid Cool Services - Google Sheets App Script 
-  Paste this inside your Google Sheet:
-  1. Open sheets.google.com -> Create a sheet named "Rapid Cool Services Bookings"
-  2. Click Extensions -> Apps Script
-  3. Replace the entire code with the block below, save, and click "Deploy -> New Deployment"
-  4. Choose type: Web App, Execute as: Me, Who has access: Anyone
-  5. Copy the Web App Deployment URL and paste it as your "GOOGLE_SHEET_WEBHOOK_URL" in your environment variables!
-*/
-
-function doPost(e) {
-  try {
-    const data = JSON.parse(e.postData.contents);
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  // Delete booking from database/local
+  const deleteBooking = async (id: string) => {
+    if (!window.confirm("Are you sure you want to cancel this booking?")) return;
     
-    if (data.action === "addBooking") {
-      // Append booking row 
-      sheet.appendRow([
-        data.id,
-        data.date,
-        data.time,
-        data.customerName,
-        "'" + data.mobileNumber, // Force string representation inside sheets
-        data.customerEmail || "N/A",
-        data.applianceType,
-        data.serviceRequired,
-        data.area,
-        data.address,
-        data.preferredDate,
-        data.status
-      ]);
-      return ContentService.createTextOutput(JSON.stringify({ success: true })).setMimeType(ContentService.MimeType.JSON);
-    }
-    
-    if (data.action === "updateBooking") {
-      const rows = sheet.getDataRange().getValues();
-      for (let i = 1; i < rows.length; i++) {
-        if (rows[i][0] === data.id) {
-          sheet.getRange(i + 1, 12).setValue(data.status); // Updates Status column
-          break;
-        }
+    try {
+      const response = await fetch(`https://rapidcool-new-backend.onrender.com/api/bookings/${id}`, {
+        method: "DELETE"
+      });
+      if (response.ok) {
+        setBookings(bookings.filter(b => b._id !== id && b.id !== id));
+      } else {
+        alert("Failed to delete booking from backend.");
       }
-      return ContentService.createTextOutput(JSON.stringify({ success: true, updated: true })).setMimeType(ContentService.MimeType.JSON);
+    } catch (err) {
+      console.error("Error deleting:", err);
+      // Fallback: Delete locally
+      const filtered = bookings.filter(b => b.id !== id && b._id !== id);
+      setBookings(filtered);
+      localStorage.setItem("rapid_cool_bookings", JSON.stringify(filtered));
     }
-    
-    return ContentService.createTextOutput(JSON.stringify({ success: false, error: "Invalid Action" })).setMimeType(ContentService.MimeType.JSON);
-    
-  } catch (err) {
-    return ContentService.createTextOutput(JSON.stringify({ success: false, error: err.message })).setMimeType(ContentService.MimeType.JSON);
-  }
-}`;
-
-  const copyToClipboard = () => {
-    navigator.clipboard.writeText(appsScriptCode);
-    setCopiedCode(true);
-    setTimeout(() => setCopiedCode(false), 2000);
   };
+
+  // Metrics Calculations
+  const totalTickets = bookings.length;
+  const pendingTickets = bookings.filter(b => !b.status || b.status === "Pending" || b.status === "New").length;
+  const completedTickets = bookings.filter(b => b.status === "Completed").length;
+  const totalEscrow = bookings.reduce((acc, b) => acc + (b.visitingFee || 499), 0);
+
+  // Unique Mumbai suburbs in database for dropdown filter
+  const suburbsList = ["All", ...Array.from(new Set(bookings.map(b => b.suburb)))];
 
   return (
-    <div className="bg-[#030d1a] min-h-screen text-slate-100 font-sans selection:bg-amber-500 selection:text-slate-950 relative">
-      
-      {/* Floating Real-Time Booking Alert Toast */}
-      <AnimatePresence>
-        {newBookingNotification && (
-          <motion.div
-            initial={{ opacity: 0, y: -50, scale: 0.9 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.9, y: -20 }}
-            className="fixed top-20 right-6 z-[9999] max-w-sm w-full bg-[#021329] border-2 border-amber-500 rounded-2xl p-5 shadow-2xl text-left backdrop-blur-md"
-          >
-            <div className="flex items-start justify-between">
-              <div className="flex items-center space-x-2.5">
-                <span className="flex h-3 w-3 relative">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-3 w-3 bg-rose-500"></span>
-                </span>
-                <span className="text-[10px] font-black uppercase tracking-wider text-amber-400 font-mono">
-                  🚨 LIVE WEBSITE NOTIFICATION
-                </span>
-              </div>
-              <button
-                onClick={() => setNewBookingNotification(null)}
-                className="text-slate-400 hover:text-white transition text-xs font-bold px-1.5 py-0.5 rounded bg-white/5"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="mt-3.5 space-y-1.5">
-              <p className="text-xs text-white leading-relaxed">
-                <strong>{newBookingNotification.customerName}</strong> has placed a new booking for <strong className="text-[#38bdf8]">{newBookingNotification.applianceType}</strong> in <strong className="text-white">{newBookingNotification.area}</strong>!
-              </p>
-              <div className="text-[11px] text-slate-300 font-mono flex justify-between">
-                <span>Phone: +91 {newBookingNotification.mobileNumber}</span>
-                <span className="text-amber-400 font-bold">₹{newBookingNotification.visitingFee}</span>
-              </div>
-            </div>
-
-            <div className="mt-4 flex gap-2 justify-end">
-              <button
-                onClick={() => {
-                  const id = newBookingNotification.id;
-                  setNewBookingNotification(null);
-                  setSearchTerm(id);
-                }}
-                className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-[#011e41] text-[10px] font-black uppercase rounded-lg tracking-wider transition"
-              >
-                View Ticket
-              </button>
-              <button
-                onClick={() => setNewBookingNotification(null)}
-                className="px-3.5 py-1.5 bg-white/10 hover:bg-white/15 text-white text-[10px] font-bold uppercase rounded-lg transition"
-              >
-                Dismiss
-              </button>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Header Bar */}
-      <header className="border-b border-blue-900/40 bg-[#020912]/92 sticky top-0 z-50 backdrop-blur-md">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <button 
-              onClick={onClose}
-              className="p-1.5 rounded-lg border border-slate-750 hover:bg-white/5 transition text-slate-400 hover:text-white"
-            >
-              <ArrowLeft className="w-4 h-4" />
-            </button>
-            <div>
-              <span className="text-[9px] font-black tracking-widest text-amber-500 uppercase font-mono">
-                Rapid Cool Services
-              </span>
-              <h1 className="text-sm font-black uppercase text-white tracking-tight flex items-center">
-                <span>Central Management Dashboard</span>
-                <span className="ml-2 w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              </h1>
-            </div>
+    <div className="bg-slate-50 min-h-screen py-10 px-6 font-sans">
+      <div className="max-w-7xl mx-auto space-y-8">
+        
+        {/* Header Block */}
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-3xl border border-gray-150 shadow-sm">
+          <div>
+            <span className="text-xs bg-blue-50 text-blue-700 font-mono font-extrabold px-3 py-1 rounded-full border border-blue-100 uppercase">
+              Management Portal
+            </span>
+            <h1 className="text-2xl font-black text-[#011e41] tracking-tight mt-2 uppercase">
+              Central Management Dashboard
+            </h1>
           </div>
-          
-          <div className="flex items-center space-x-3">
-            {isAuthenticated && (
-              <button
-                onClick={handleLogout}
-                className="bg-transparent border border-rose-900 text-rose-400 hover:bg-rose-950/20 px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center space-x-1.5 cursor-pointer"
-              >
-                <LogOut className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Logout Session</span>
-              </button>
-            )}
+          <div className="flex gap-3">
             <button
-              onClick={onClose}
-              className="bg-white/10 hover:bg-white/15 text-white px-3.5 py-1.5 rounded-lg text-xs font-black transition cursor-pointer"
+              onClick={fetchLiveBookings}
+              disabled={loading}
+              className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 hover:border-gray-300 text-gray-700 rounded-xl font-bold text-xs uppercase cursor-pointer disabled:opacity-50"
             >
-              EXIT ADMIN
+              <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
+              <span>{loading ? "Syncing..." : "Sync Database"}</span>
+            </button>
+            <button
+              onClick={exportToCSV}
+              disabled={filteredBookings.length === 0}
+              className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs uppercase cursor-pointer disabled:opacity-50"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Export CSV</span>
             </button>
           </div>
         </div>
-      </header>
 
-      {/* Main Container */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
-        
-        {/* LOGIN GATE SCREEN */}
-        {!isAuthenticated ? (
-          <div className="max-w-md mx-auto py-16">
-            <div className="bg-[#021329]/80 border border-blue-900/50 rounded-2xl p-8 shadow-2xl space-y-6">
-              <div className="text-center space-y-2">
-                <div className="w-14 h-14 bg-amber-500/10 text-amber-400 border border-amber-500/30 rounded-2xl flex items-center justify-center mx-auto text-2xl">
-                  <Lock className="w-6 h-6 stroke-[2]" />
-                </div>
-                <h2 className="text-xl font-extrabold uppercase tracking-tight text-white mt-4">
-                  Admin Sign-In
-                </h2>
-                <p className="text-xs text-slate-400 leading-relaxed max-w-xs mx-auto">
-                  Owner dashboard is securely protected. Please sign in using the Rapid Cool administrative credentials.
-                </p>
-              </div>
-
-              {loginError && (
-                <div className="bg-red-950/30 border border-red-900/50 text-red-400 p-3.5 rounded-xl text-xs font-semibold leading-relaxed flex items-center space-x-2">
-                  <AlertTriangle className="w-4 h-4 shrink-0" />
-                  <span>{loginError}</span>
-                </div>
-              )}
-
-              <form onSubmit={handleLogin} className="space-y-4 text-left">
-                <div>
-                  <label className="block text-[9px] font-black uppercase text-slate-400 tracking-wider mb-1 font-mono">
-                    Admin Username
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. admin"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    className="w-full bg-[#010c1c] border border-blue-900/60 rounded-xl py-3 px-4 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 font-bold"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[9px] font-black uppercase text-slate-400 tracking-wider mb-1 font-mono">
-                    Security Password
-                  </label>
-                  <input
-                    type="password"
-                    required
-                    placeholder="••••••••••••••"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full bg-[#010c1c] border border-blue-900/60 rounded-xl py-3 px-4 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 font-bold"
-                  />
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={loadingLogin}
-                  className="w-full bg-amber-500 hover:bg-amber-600 text-[#011e41] py-3.5 rounded-xl font-black text-xs uppercase tracking-widest transition shadow-lg mt-2 flex items-center justify-center space-x-2 disabled:opacity-50"
-                >
-                  {loadingLogin ? (
-                    <span>Authenticating System...</span>
-                  ) : (
-                    <>
-                      <Lock className="w-4 h-4" />
-                      <span>Authenticate Securely</span>
-                    </>
-                  )}
-                </button>
-              </form>
-
-              <div className="text-center pt-2">
-                <button
-                  onClick={onClose}
-                  className="text-xs text-slate-500 hover:text-slate-350 transition flex items-center justify-center gap-1 mx-auto"
-                >
-                  <ArrowLeft className="w-3.5 h-3.5" />
-                  Return plain web store
-                </button>
-              </div>
+        {/* Dynamic Metric Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="bg-white p-5 rounded-2xl border border-gray-150 shadow-sm">
+            <div className="flex justify-between items-center text-blue-600">
+              <ClipboardList className="w-6 h-6" />
+              <span className="text-[10px] font-mono font-bold bg-blue-50 px-2 py-0.5 rounded">TOTAL</span>
             </div>
+            <p className="text-2xl font-black text-gray-900 mt-3">{totalTickets}</p>
+            <p className="text-[10px] text-gray-500 font-medium uppercase mt-1">Total Bookings in Database</p>
           </div>
-        ) : (
-          /* ACTUAL ADMINISTRATIVE USER WORKSPACE */
-          <div className="space-y-8">
-            
-            {/* 1. Quick Stats Grid */}
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-              
-              <div className="bg-[#021329]/60 border border-blue-900/30 rounded-xl p-4.5 space-y-1">
-                <span className="text-[9px] font-mono font-bold uppercase text-slate-400 block">Total Tickets</span>
-                <span className="text-2xl font-black text-white block">{stats.total}</span>
-                <span className="text-[10px] text-slate-400 font-mono">Registered in local cache</span>
-              </div>
 
-              <div className="bg-[#021329]/60 border border-blue-900/30 rounded-xl p-4.5 space-y-1">
-                <span className="text-[9px] font-mono font-bold uppercase text-amber-400 block">⚡ New Bookings</span>
-                <span className="text-2xl font-black text-amber-400 block">{stats.new}</span>
-                <span className="text-[10px] text-slate-400 font-mono">Awaiting dispatch</span>
-              </div>
-
-              <div className="bg-[#021329]/60 border border-blue-900/30 rounded-xl p-4.5 space-y-1">
-                <span className="text-[9px] font-mono font-bold uppercase text-blue-400 block">🛠️ Assigned Active</span>
-                <span className="text-2xl font-black text-blue-400 block">{stats.assigned}</span>
-                <span className="text-[10px] text-slate-400 font-mono">Technicians en route</span>
-              </div>
-
-              <div className="bg-[#021329]/60 border border-blue-900/30 rounded-xl p-4.5 space-y-1">
-                <span className="text-[9px] font-mono font-bold uppercase text-emerald-400 block">✓ Completed</span>
-                <span className="text-2xl font-black text-emerald-400 block">{stats.completed}</span>
-                <span className="text-[10px] text-slate-400 font-mono">Invoices finalised</span>
-              </div>
-
-              <div className="bg-[#021329]/60 border border-amber-500/20 rounded-xl p-4.5 space-y-1 col-span-2 md:col-span-1">
-                <span className="text-[9px] font-mono font-bold uppercase text-amber-500 block">Visiting Escrow</span>
-                <span className="text-2xl font-black text-amber-500 block">₹{stats.revenue}</span>
-                <span className="text-[10px] text-slate-400 font-mono">Waived on final repair</span>
-              </div>
-
+          <div className="bg-white p-5 rounded-2xl border border-gray-150 shadow-sm">
+            <div className="flex justify-between items-center text-amber-600">
+              <Clock className="w-6 h-6" />
+              <span className="text-[10px] font-mono font-bold bg-amber-50 px-2 py-0.5 rounded">PENDING</span>
             </div>
+            <p className="text-2xl font-black text-gray-900 mt-3">{pendingTickets}</p>
+            <p className="text-[10px] text-gray-500 font-medium uppercase mt-1">Awaiting dispatch</p>
+          </div>
 
-            {/* 2. Admin Quick Guide & Google Sheet Config */}
-            <div className="bg-[#011e41]/50 border border-blue-900/50 rounded-2xl p-6 space-y-4">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                <div className="space-y-1 text-left">
-                  <div className="flex items-center gap-2 text-amber-500">
-                    <FileSpreadsheet className="w-5 h-5 text-amber-400" />
-                    <span className="text-xs font-black tracking-wider uppercase font-mono">
-                      Google Sheets Integration Connected
-                    </span>
-                  </div>
-                  <h3 className="text-base font-extrabold text-white">
-                    Need to link a dynamic Google Sheet spreadsheet for live sync?
-                  </h3>
-                  <p className="text-xs text-slate-300 max-w-2xl leading-relaxed">
-                    Keep your Excel Sheets up to date automatically! We support appending real bookings as fresh rows directly into your selected Google Sheet via our secure lightweight micro-Apps Script.
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setShowSheetCode(!showSheetCode)}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-[11px] rounded-lg uppercase tracking-wider transition cursor-pointer"
-                  >
-                    {showSheetCode ? "Hide Instruction Script" : "Reveal Google Script"}
-                  </button>
-                </div>
-              </div>
-
-              <AnimatePresence>
-                {showSheetCode && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: "auto" }}
-                    exit={{ opacity: 0, height: 0 }}
-                    className="overflow-hidden space-y-3 pt-4 border-t border-blue-900/40"
-                  >
-                    <div className="text-xs text-left text-slate-300 space-y-1.5 bg-slate-950 p-4 rounded-xl border border-blue-900/30">
-                      <p><strong>Step 1:</strong> Go to <a href="https://sheets.google.com" target="_blank" rel="noreferrer" className="text-amber-400 underline font-bold">sheets.google.com</a> and build a spreadsheet with the name <strong>"Rapid Cool Services Bookings"</strong>.</p>
-                      <p><strong>Step 2:</strong> In the upper menu, go to <strong>Extensions ➔ Apps Script</strong>.</p>
-                      <p><strong>Step 3:</strong> Paste the code block below, replacing any template code there perfectly.</p>
-                      <p><strong>Step 4:</strong> Click <strong>Deploy ➔ New Deployment</strong>. Choose <strong>Web App</strong>, change Who has access to <strong>"Anyone"</strong>, execute as <strong>"Me"</strong>, and click Deploy.</p>
-                      <p><strong>Step 5:</strong> Copy the output Web App URL and add it to your <code>.env.example / server</code> environment secrets as <code>GOOGLE_SHEET_WEBHOOK_URL</code>.</p>
-                    </div>
-
-                    <div className="relative">
-                      <pre className="text-[10px] text-slate-300 overflow-x-auto text-left bg-slate-950 p-4.5 rounded-xl border border-blue-900/60 font-mono leading-relaxed max-h-72">
-                        {appsScriptCode}
-                      </pre>
-                      <button
-                        onClick={copyToClipboard}
-                        className="absolute top-3 right-3 bg-white/10 hover:bg-white/15 text-white p-2 rounded-lg text-xs font-bold transition flex items-center space-x-1.5 bubble-button"
-                        title="Copy Apps Script to clipboard"
-                      >
-                        <Copy className="w-3.5 h-3.5" />
-                        <span>{copiedCode ? "Copied!" : "Copy Code"}</span>
-                      </button>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+          <div className="bg-white p-5 rounded-2xl border border-gray-150 shadow-sm">
+            <div className="flex justify-between items-center text-emerald-600">
+              <CheckCircle className="w-6 h-6" />
+              <span className="text-[10px] font-mono font-bold bg-emerald-50 px-2 py-0.5 rounded">COMPLETED</span>
             </div>
+            <p className="text-2xl font-black text-gray-900 mt-3">{completedTickets}</p>
+            <p className="text-[10px] text-gray-500 font-medium uppercase mt-1">Invoices finalized</p>
+          </div>
 
-            {/* 3. Search & Operational Filters Panel */}
-            <div className="bg-[#020d1c]/80 border border-blue-900/30 rounded-2xl p-5 space-y-4">
-              <div className="flex flex-col md:flex-row gap-4 items-center justify-between text-left">
-                
-                {/* Search Term input */}
-                <div className="relative w-full md:w-80">
-                  <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
-                    <Search className="w-4 h-4" />
-                  </span>
-                  <input
-                    type="text"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    placeholder="Search ID, name, number, address..."
-                    className="w-full bg-slate-950 border border-blue-900/50 rounded-xl py-2 px-10 text-xs placeholder-slate-500 focus:outline-none focus:border-blue-500 font-bold"
-                  />
-                </div>
-
-                {/* Suburb Selector */}
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 w-full md:w-auto">
-                  <div>
-                    <select
-                      value={suburbFilter}
-                      onChange={(e) => setSuburbFilter(e.target.value)}
-                      className="w-full bg-slate-950 border border-blue-900/50 rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-amber-500 font-bold cursor-pointer text-slate-300"
-                    >
-                      <option value="">All Mumbai Suburbs</option>
-                      {MUMBAI_SUBURBS.map(sub => (
-                        <option key={sub} value={sub}>{sub}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Status Selector */}
-                  <div>
-                    <select
-                      value={statusFilter}
-                      onChange={(e) => setStatusFilter(e.target.value)}
-                      className="w-full bg-slate-950 border border-blue-900/50 rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-amber-500 font-bold cursor-pointer text-slate-300"
-                    >
-                      <option value="">All Statuses</option>
-                      <option value="New">🚨 New</option>
-                      <option value="Assigned">🛠️ Assigned</option>
-                      <option value="Completed">✓ Completed</option>
-                    </select>
-                  </div>
-
-                  {/* Export CSV CTA */}
-                  <div className="col-span-2 sm:col-span-1">
-                    <button
-                      onClick={triggerCSVDownload}
-                      className="w-full py-2 bg-amber-500 hover:bg-amber-600 text-[#011e41] text-xs font-black uppercase rounded-xl tracking-wider transition-all flex items-center justify-center space-x-1.5 cursor-pointer"
-                    >
-                      <FileSpreadsheet className="w-3.5 h-3.5 stroke-[2.5]" />
-                      <span>Export to CSV</span>
-                    </button>
-                  </div>
-
-                </div>
-
-              </div>
+          <div className="bg-white p-5 rounded-2xl border border-gray-150 shadow-sm">
+            <div className="flex justify-between items-center text-indigo-600">
+              <TrendingUp className="w-6 h-6" />
+              <span className="text-[10px] font-mono font-bold bg-indigo-50 px-2 py-0.5 rounded">ESCROW</span>
             </div>
+            <p className="text-2xl font-black text-gray-900 mt-3">₹{totalEscrow}</p>
+            <p className="text-[10px] text-gray-500 font-medium uppercase mt-1">Adjusted on repair completion</p>
+          </div>
+        </div>
 
-            {/* 4. Live Table View / Mobile Cards Container */}
-            <div className="bg-[#021329]/20 border border-blue-900/20 rounded-2xl overflow-hidden shadow-2xl">
-              
-              <div className="bg-slate-950/60 py-3.5 px-6 border-b border-blue-900/30 flex items-center justify-between">
-                <span className="text-xs uppercase font-black tracking-widest text-[#38bdf8] font-mono">
-                  Active Dispatch Database ({filteredBookings.length} bookings listed)
-                </span>
-                <button
-                  onClick={() => fetchBookings()}
-                  disabled={isRefreshing}
-                  className="p-1 text-slate-400 hover:text-white transition cursor-pointer"
-                  title="Reload Live Database"
-                >
-                  <RefreshCw className={`w-4 h-4 ${isRefreshing ? "animate-spin" : ""}`} />
-                </button>
-              </div>
+        {/* Filter Controls */}
+        <div className="bg-white p-6 rounded-2xl border border-gray-150 shadow-sm grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="relative">
+            <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-3.5" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search Customer, ID, Phone..."
+              className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-600 text-sm font-medium"
+            />
+          </div>
 
-              {isLoading ? (
-                <div className="text-center py-20 text-slate-400 space-y-3 font-mono">
-                  <RefreshCw className="w-8 h-8 animate-spin mx-auto text-amber-500" />
-                  <p className="text-xs">Gathering rapid cool bookings cache...</p>
-                </div>
-              ) : filteredBookings.length === 0 ? (
-                <div className="text-center py-20 text-slate-500 text-xs font-mono space-y-2">
-                  <p>🔍 No bookings found matching the selected search query or category filters.</p>
-                  <button 
-                    onClick={() => { setSearchTerm(""); setStatusFilter(""); setSuburbFilter(""); }}
-                    className="text-amber-500 hover:underline font-bold"
-                  >
-                    Reset Filter Query Settings
-                  </button>
-                </div>
-              ) : (
-                /* Desktop Table Layout View */
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse font-sans text-xs min-w-[1000px]">
-                    <thead>
-                      <tr className="bg-slate-950/90 text-slate-400 border-b border-blue-900/30">
-                        <th className="py-4.5 px-6 font-mono font-black uppercase tracking-wider text-[10px]">Reference Ticket</th>
-                        <th className="py-4.5 px-5 font-black uppercase tracking-wider text-[10px]">Customer Details</th>
-                        <th className="py-4.5 px-5 font-black uppercase tracking-wider text-[10px]">Appliance & Service</th>
-                        <th className="py-4.5 px-5 font-black uppercase tracking-wider text-[10px]">Doorstep Address</th>
-                        <th className="py-4.5 px-4 font-black uppercase tracking-wider text-[10px]">Status Tracker</th>
-                        <th className="py-4.5 px-4 font-black uppercase tracking-wider text-[10px] text-right">Escrow Cost</th>
-                        <th className="py-4.5 px-5 font-black uppercase tracking-wider text-[10px] text-center">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-blue-900/10">
-                      {filteredBookings.map((b) => (
-                        <tr key={b.id} className="hover:bg-blue-950/20 bg-slate-950/10 transition">
-                          {/* Col 1: Ticket References */}
-                          <td className="py-4 px-6 items-start font-mono text-left">
-                            <strong className="block text-amber-400 text-sm font-black tracking-wider">{b.id}</strong>
-                            <span className="block text-[10px] text-slate-400 mt-1">{b.date} • {b.time}</span>
-                            <span className="block text-[9px] text-[#38bdf8] font-bold mt-1 uppercase">Pref: {b.preferredDate}</span>
-                          </td>
+          <div>
+            <select
+              value={selectedSuburb}
+              onChange={(e) => setSelectedSuburb(e.target.value)}
+              className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-600 text-sm font-semibold text-gray-700"
+            >
+              {suburbsList.map(sub => (
+                <option key={sub} value={sub}>{sub === "All" ? "All Suburbs" : sub}</option>
+              ))}
+            </select>
+          </div>
 
-                          {/* Col 2: Customer Name, Email, Phone */}
-                          <td className="py-4 px-5">
-                            <strong className="block text-white text-sm font-extrabold">{b.customerName}</strong>
-                            <div className="flex items-center space-x-1 text-slate-350 mt-1 font-mono font-bold">
-                              <Phone className="w-3 h-3 text-amber-500 shrink-0" />
-                              <span>+91 {b.mobileNumber}</span>
-                            </div>
-                            {b.customerEmail && (
-                              <span className="block text-[10px] text-slate-400 truncate max-w-[160px] font-mono mt-1">{b.customerEmail}</span>
-                            )}
-                          </td>
+          <div>
+            <select
+              value={selectedStatus}
+              onChange={(e) => setSelectedStatus(e.target.value)}
+              className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-600 text-sm font-semibold text-gray-700"
+            >
+              <option value="All">All Statuses</option>
+              <option value="Pending">🚨 New / Pending</option>
+              <option value="Completed">✓ Completed</option>
+            </select>
+          </div>
+        </div>
 
-                          {/* Col 3: Service details */}
-                          <td className="py-4 px-5">
-                            <strong className="block text-[#38bdf8] text-[13px] font-black uppercase">{b.applianceType}</strong>
-                            <span className="block text-slate-300 mt-1 font-medium">{b.serviceRequired}</span>
-                            <div className="flex gap-1.5 mt-2">
-                              {b.express && (
-                                <span className="bg-amber-500/10 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wide">
-                                  ⚡ EXPRESS
-                                </span>
-                              )}
-                              {b.warranty && (
-                                <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wide">
-                                  🛡️ 90D PARTS
-                                </span>
-                              )}
-                            </div>
-                          </td>
-
-                          {/* Col 4: Location Address */}
-                          <td className="py-4 px-5 max-w-xs">
-                            <div className="flex items-start space-x-1">
-                              <MapPin className="w-3.5 h-3.5 text-rose-500 shrink-0 mt-0.5" />
-                              <div>
-                                <strong className="text-white text-xs block">{b.area}</strong>
-                                <p className="text-slate-400 text-[11px] mt-1 leading-relaxed line-clamp-3">
-                                  {b.address}
-                                </p>
-                              </div>
-                            </div>
-                            {b.additionalNotes && (
-                              <div className="text-[10px] text-amber-300 italic font-medium mt-1 bg-amber-500/5 p-1 rounded-lg border border-amber-500/10">
-                                Note: {b.additionalNotes}
-                              </div>
-                            )}
-                          </td>
-
-                          {/* Col 5: Dropdown Status update control */}
-                          <td className="py-4 px-4 font-mono">
-                            <div className="space-y-1.5">
-                              <select
-                                value={b.status}
-                                onChange={(e) => updateBookingStatus(b.id, e.target.value as any)}
-                                className={`text-[10px] font-black uppercase tracking-wider py-1.5 px-2.5 rounded-lg border focus:outline-none cursor-pointer ${
-                                  b.status === "New" 
-                                    ? "bg-amber-500/15 text-amber-400 border-amber-500/30" 
-                                    : b.status === "Assigned"
-                                    ? "bg-blue-500/15 text-blue-400 border-blue-500/30"
-                                    : "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
-                                }`}
-                              >
-                                <option value="New" className="bg-[#030d1a] font-black text-amber-400">🚨 New Request</option>
-                                <option value="Assigned" className="bg-[#030d1a] font-black text-blue-400">🛠️ Assigned</option>
-                                <option value="Completed" className="bg-[#030d1a] font-black text-emerald-400">✓ Completed</option>
-                              </select>
-                            </div>
-                          </td>
-
-                          {/* Col 6: Price costs */}
-                          <td className="py-4 px-4 text-right font-mono">
-                            <strong className="text-white font-black text-sm">₹{b.visitingFee}</strong>
-                            <span className="block text-[9px] text-slate-400 mt-1">Visit Escrow</span>
-                          </td>
-
-                          {/* Col 7: Actions */}
-                          <td className="py-4 px-5 text-center">
-                            <div className="flex items-center justify-center gap-2">
-                              <a
-                                href={`https://wa.me/91${b.mobileNumber}?text=Hello%20${encodeURIComponent(b.customerName)},%20this%20is%20Rapid%20Cool%20Services%20Mumbai.%20We%20received%20your%20booking%20for%20${encodeURIComponent(b.applianceType)}%20(ID:%20${b.id}).%20Our%20certified%20technician%20is%20dispatched%20to%20your%20address%20in%20${encodeURIComponent(b.area)}.%20Please%20verify%20if%20you%20are%20available%20now.`}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="p-1 px-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[9px] font-black uppercase tracking-wider flex items-center space-x-1 transition"
-                                title="Instantly coordinate with homeowner on WhatsApp"
-                              >
-                                <MessageSquare className="w-3 h-3 fill-white" />
-                                <span>WhatsApp Customer</span>
-                              </a>
-
-                              <button
-                                onClick={() => deleteBookingRecord(b.id)}
-                                className="p-1.5 bg-rose-950/25 text-rose-450 border border-rose-900/40 rounded-lg hover:bg-rose-900 hover:text-white transition"
-                                title="Remove reservation permanently"
-                              >
-                                Delete
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-
-            </div>
-
+        {/* Database List */}
+        {error && (
+          <div className="bg-amber-50 border border-amber-200 text-amber-800 p-4 rounded-xl text-xs font-semibold">
+            ⚠️ {error}
           </div>
         )}
 
-      </main>
+        {filteredBookings.length === 0 ? (
+          <div className="bg-white text-center py-16 rounded-2xl border border-gray-150 shadow-sm">
+            <p className="text-gray-400 text-sm font-bold">No live bookings found matching criteria.</p>
+          </div>
+        ) : (
+          <div className="bg-white rounded-2xl border border-gray-150 shadow-sm overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-50/80 border-b border-gray-150 text-gray-500 font-extrabold text-[10px] uppercase tracking-wider">
+                    <th className="p-4">Ticket details</th>
+                    <th className="p-4">Customer Contact</th>
+                    <th className="p-4">Address details</th>
+                    <th className="p-4">Addons & Cost</th>
+                    <th className="p-4 text-right">Operations</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 text-xs font-semibold text-gray-700">
+                  {filteredBookings.map((book) => (
+                    <tr key={book._id || book.id} className="hover:bg-slate-50/40 transition-colors">
+                      <td className="p-4 space-y-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-mono font-bold text-blue-600 text-[10px] bg-blue-50 px-1.5 py-0.5 rounded">
+                            {book.id || "RC-9901-MUM"}
+                          </span>
+                          <span className={`text-[9px] px-1.5 py-0.5 rounded font-black uppercase ${
+                            book.status === "Completed" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"
+                          }`}>
+                            {book.status || "Pending"}
+                          </span>
+                        </div>
+                        <p className="text-gray-900 font-black text-sm">{book.appliance}</p>
+                        <p className="text-gray-400 font-mono text-[9px]">{book.date}</p>
+                      </td>
+
+                      <td className="p-4 space-y-1">
+                        <p className="text-gray-900 font-bold">{book.name}</p>
+                        <a href={`tel:${book.phone}`} className="text-blue-600 font-mono hover:underline block">{book.phone}</a>
+                        <p className="text-gray-400 text-[10px] font-mono">{book.email || "No email provided"}</p>
+                      </td>
+
+                      <td className="p-4 space-y-1">
+                        <p className="font-extrabold text-gray-900 flex items-center gap-1">
+                          <MapPin className="w-3.5 h-3.5 text-red-500" />
+                          <span>{book.suburb}</span>
+                        </p>
+                        <p className="text-gray-500 font-medium max-w-xs leading-relaxed">{book.address}</p>
+                        {book.notes && (
+                          <p className="text-[10px] text-amber-700 bg-amber-50/50 p-1.5 rounded border border-amber-100 max-w-xs italic">
+                            💬 Notes: {book.notes}
+                          </p>
+                        )}
+                      </td>
+
+                      <td className="p-4 space-y-1.5">
+                        <strong className="text-gray-900 text-sm font-black">₹{book.visitingFee || 499}</strong>
+                        <div className="flex gap-1 flex-wrap">
+                          {book.express && (
+                            <span className="bg-orange-50 text-orange-700 text-[8px] font-black uppercase px-1 rounded">
+                              Same Day
+                            </span>
+                          )}
+                          {book.warranty && (
+                            <span className="bg-emerald-50 text-emerald-700 text-[8px] font-black uppercase px-1 rounded">
+                              Warranty Active
+                            </span>
+                          )}
+                        </div>
+                      </td>
+
+                      <td className="p-4 text-right">
+                        <button
+                          onClick={() => deleteBooking(book._id || book.id || "")}
+                          className="p-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl transition cursor-pointer"
+                          title="Cancel Ticket"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
