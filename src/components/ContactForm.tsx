@@ -48,7 +48,6 @@ export default function ContactForm({
   const [submittedBooking, setSubmittedBooking] = useState<LocalBooking | null>(null);
   const [bookingsList, setBookingsList] = useState<LocalBooking[]>([]);
 
-  // Load existing bookings from localStorage on mount and whenever custom event occurs
   useEffect(() => {
     const loadBookings = () => {
       const saved = localStorage.getItem("rapid_cool_bookings");
@@ -79,7 +78,6 @@ export default function ContactForm({
     const selectedApplianceName =
       SERVICES_LIST.find((s) => s.id === selectedServiceId)?.name || "General Inspection Service";
 
-    // Format target payload matching Express Backend expectations
     const payload = {
       name: fullName,
       email: customerEmail,
@@ -94,29 +92,7 @@ export default function ContactForm({
     };
 
     try {
-      // Netlify Compatibility Double POST
-      try {
-        await fetch("/", {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: new URLSearchParams({
-            "form-name": "bookings-netlify",
-            "name": fullName,
-            "phone": phoneNumber,
-            "email": customerEmail,
-            "suburb": selectedSuburb,
-            "address": fullAddress,
-            "date": preferredDate,
-            "appliance": selectedApplianceName,
-            "notes": additionalNotes
-          }).toString(),
-        });
-        console.log("Netlify Form submission backup logged.");
-      } catch (netlifyErr) {
-        console.warn("Netlify backup submission failed to dial out locally.");
-      }
-
-      // 🟢 Corrected dynamic API call to the live Render backend
+      // 🟢 DIRECT CALL TO RENDER BACKEND (Vercel Friendly - No Netlify code)
       const response = await fetch("https://rapidcool-new-backend.onrender.com/api/bookings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -204,7 +180,7 @@ export default function ContactForm({
       <div className="container mx-auto px-6 max-w-5xl">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-start">
           
-          {/* Column A: Contact Details (5 cols) */}
+          {/* Column A: Contact Details */}
           <div className="lg:col-span-5 space-y-8">
             <div>
               <span className="text-blue-700 text-xs font-black tracking-widest uppercase bg-blue-50 px-4 py-1.5 rounded-full inline-block mb-3 font-mono border border-blue-100">
@@ -256,7 +232,7 @@ export default function ContactForm({
                 </div>
               </div>
 
-              {/* Instagram Handle */}
+              {/* Social Feed */}
               <div className="flex items-start space-x-4 bg-slate-50 p-4.5 rounded-2xl border border-gray-150 shadow-sm transition-all hover:shadow-md">
                 <div className="w-12 h-12 bg-amber-550/10 text-amber-600 rounded-xl flex items-center justify-center text-xl shrink-0">
                   <Mail className="w-5 h-5 stroke-[2]" />
@@ -267,14 +243,14 @@ export default function ContactForm({
                     Instagram: <span className="text-[#0248a3] font-bold">{BRAND_CONTACT.instagram}</span>
                   </p>
                   <p className="text-[10px] text-gray-500 mt-0.5 font-sans">
-                    Email: rapidcoolservices0services@gail.com
+                    Email: rapidcoolservices0services@gmail.com
                   </p>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Column B: Simple Booking / Confirmation Container (7 cols) */}
+          {/* Column B: Booking Form */}
           <div className="lg:col-span-7">
             <AnimatePresence mode="wait">
               {!submittedBooking ? (
@@ -293,7 +269,6 @@ export default function ContactForm({
                     </span>
                   </h3>
 
-                   {/* Pre-fill calculations summary */}
                   {selectedServiceId && (
                     <div className="bg-blue-50/50 p-4.5 rounded-xl border border-blue-100 mb-6 text-xs text-blue-900">
                       <div className="flex justify-between items-center">
@@ -326,7 +301,6 @@ export default function ContactForm({
                   )}
 
                   <form onSubmit={handleBookingSubmit} className="space-y-4">
-                    {/* Full Name */}
                     <div>
                       <label className="block text-[10px] font-extrabold text-[#011e41] uppercase tracking-wider mb-1.5">
                         Your Full Name
@@ -338,11 +312,9 @@ export default function ContactForm({
                         onChange={(e) => setFullName(e.target.value)}
                         placeholder="e.g., Rajesh Sharma"
                         className="w-full p-3.5 border border-gray-200 rounded-xl bg-slate-50/50 focus:outline-none focus:ring-2 focus:ring-[#0f5fc2] focus:bg-white text-gray-900 font-bold text-sm transition-all"
-                        id="booking-name-input"
                       />
                     </div>
 
-                    {/* Phone Number & Email Address in responsive row */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-[10px] font-extrabold text-[#011e41] uppercase tracking-wider mb-1.5">
@@ -357,13 +329,12 @@ export default function ContactForm({
                           onChange={(e) => setPhoneNumber(e.target.value)}
                           placeholder="10-digit mobile, e.g., 9082213527"
                           className="w-full p-3.5 border border-[#0f5fc2]/30 rounded-xl bg-slate-50/50 focus:outline-none focus:ring-2 focus:ring-[#0f5fc2] focus:bg-white text-gray-900 font-bold text-sm transition-all"
-                          id="booking-phone-input"
                         />
                       </div>
 
                       <div>
                         <label className="block text-[10px] font-extrabold text-[#011e41] uppercase tracking-wider mb-1.5">
-                          Your Email Address (for tracking receipt)
+                          Your Email Address
                         </label>
                         <input
                           type="email"
@@ -372,12 +343,10 @@ export default function ContactForm({
                           onChange={(e) => setCustomerEmail(e.target.value)}
                           placeholder="e.g., rajesh@gmail.com"
                           className="w-full p-3.5 border border-gray-200 rounded-xl bg-slate-50/50 focus:outline-none focus:ring-2 focus:ring-[#0f5fc2] focus:bg-white text-gray-900 font-bold text-sm transition-all"
-                          id="booking-email-input"
                         />
                       </div>
                     </div>
 
-                    {/* Suburb & Preferred Date in responsive row */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-[10px] font-extrabold text-[#011e41] uppercase tracking-wider mb-1.5">
@@ -388,7 +357,6 @@ export default function ContactForm({
                           value={selectedSuburb}
                           onChange={(e) => setSelectedSuburb(e.target.value)}
                           className="w-full p-3.5 border border-gray-200 rounded-xl bg-slate-50/50 focus:outline-none focus:ring-2 focus:ring-[#0f5fc2] focus:bg-white text-gray-850 font-bold text-sm transition-all"
-                          id="booking-suburb-select"
                         >
                           <option value="">-- Choose Suburb --</option>
                           {MUMBAI_SUBURBS.map((sub) => (
@@ -411,12 +379,10 @@ export default function ContactForm({
                           value={preferredDate}
                           onChange={(e) => setPreferredDate(e.target.value)}
                           className="w-full p-3.5 border border-gray-200 rounded-xl bg-slate-50/50 focus:outline-none focus:ring-2 focus:ring-[#0f5fc2] focus:bg-white text-gray-900 font-bold text-sm transition-all"
-                          id="booking-date-input"
                         />
                       </div>
                     </div>
 
-                    {/* Full Doorstep Address */}
                     <div>
                       <label className="block text-[10px] font-extrabold text-[#011e41] uppercase tracking-wider mb-1.5">
                         Home / Flat Doorstep Address
@@ -428,11 +394,9 @@ export default function ContactForm({
                         onChange={(e) => setFullAddress(e.target.value)}
                         placeholder="e.g., Flat 12, BMC Colony, Near Hera Panna Mall, Oshiwara, Andheri West"
                         className="w-full p-3.5 border border-gray-200 rounded-xl bg-slate-50/50 focus:outline-none focus:ring-2 focus:ring-[#0f5fc2] focus:bg-white text-gray-900 font-bold text-sm transition-all resize-none"
-                        id="booking-address-input"
                       />
                     </div>
 
-                    {/* Additional Notes input */}
                     <div>
                       <label className="block text-[10px] font-extrabold text-[#011e41] uppercase tracking-wider mb-1.5">
                         Additional Notes / Request details
@@ -443,17 +407,14 @@ export default function ContactForm({
                         onChange={(e) => setAdditionalNotes(e.target.value)}
                         placeholder="e.g. AC cooling is low, please bring gas testing equipment"
                         className="w-full p-3.5 border border-gray-200 rounded-xl bg-slate-50/50 focus:outline-none focus:ring-2 focus:ring-[#0f5fc2] focus:bg-white text-gray-900 font-bold text-sm transition-all"
-                        id="booking-notes-input"
                       />
                     </div>
 
-                    {/* Premium Options Selectors */}
                     <div className="space-y-3 pt-1 pb-1">
                       <span className="block text-[10px] font-extrabold text-[#011e41] uppercase tracking-wider">
                         Premium Add-ons (Optional)
                       </span>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                        {/* Express Same-Day */}
                         <div
                           onClick={() => setExpress(!express)}
                           className={`flex items-start space-x-3 p-3.5 rounded-xl border transition-all cursor-pointer ${
@@ -475,7 +436,6 @@ export default function ContactForm({
                           </div>
                         </div>
 
-                        {/* 90-Day Warranty */}
                         <div
                           onClick={() => setWarranty(!warranty)}
                           className={`flex items-start space-x-3 p-3.5 rounded-xl border transition-all cursor-pointer ${
@@ -503,7 +463,6 @@ export default function ContactForm({
                       type="submit"
                       disabled={bookingLoading}
                       className="w-full bg-[#0f5fc2] text-white py-4 rounded-xl font-bold uppercase text-xs tracking-wider hover:bg-[#0248a3] transition shadow-lg shadow-blue-100 hover:shadow-xl hover:translate-y-[-1px] cursor-pointer flex items-center justify-center space-x-2 disabled:opacity-60"
-                      id="booking-submit-button"
                     >
                       {bookingLoading ? (
                         <span>Processing with System...</span>
@@ -536,7 +495,6 @@ export default function ContactForm({
                     We have specialists active near <strong>{submittedBooking.suburb}</strong>. An engineer will contact you on <strong>+91 {submittedBooking.phone}</strong> in under 15 minutes.
                   </p>
 
-                  {/* Booking Receipt Summary Card */}
                   <div className="bg-blue-950/80 rounded-2xl p-6 mb-8 text-left border border-blue-900/60 font-sans space-y-3.5 text-sm">
                     <div className="flex justify-between items-center pb-3 border-b border-blue-900/40">
                       <span className="text-blue-300 text-[10px] uppercase font-bold tracking-widest font-mono">Reference Ticket ID</span>
@@ -568,7 +526,6 @@ export default function ContactForm({
                     <button
                       onClick={() => setSubmittedBooking(null)}
                       className="px-6 py-3 bg-[#0a3263] text-white font-extrabold rounded-xl hover:bg-[#0248a3] transition text-xs uppercase tracking-wider cursor-pointer"
-                      id="close-confirmation-button"
                     >
                       Book Another Service
                     </button>
@@ -584,7 +541,6 @@ export default function ContactForm({
               )}
             </AnimatePresence>
 
-            {/* Dashboard / History tab to show the premium booking engine actually saves state */}
             {bookingsList.length > 0 && (
               <div className="mt-10 bg-slate-50 rounded-2xl border border-gray-150 p-6 shadow-sm">
                 <div className="flex justify-between items-center mb-4">
