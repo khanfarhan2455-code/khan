@@ -1,9 +1,8 @@
 import { useState, useEffect, FormEvent } from "react";
 import { 
-  Lock, Search, Filter, RefreshCw, LogOut, CheckCircle, Wrench, Clock, FileSpreadsheet, 
-  ChevronRight, Phone, MessageSquare, MapPin, Calendar, HelpCircle, Copy, AlertTriangle, ArrowLeft
+  Lock, Search, RefreshCw, LogOut, Phone, MessageSquare, MapPin, Copy, AlertTriangle, ArrowLeft, FileSpreadsheet
 } from "lucide-react";
-import { MUMBAI_SUBURBS, SERVICES_LIST } from "../data";
+import { MUMBAI_SUBURBS } from "../data";
 
 // ==========================================
 // 💡 LIVE PRODUCTION BACKEND CONFIGURATION
@@ -27,13 +26,6 @@ interface AdminBooking {
   express: boolean;
   warranty: boolean;
   visitingFee: number;
-  deliveryTries?: {
-    emailAdmin: number;
-    emailCustomer: number;
-    sheets: number;
-    whatsapp: number;
-  };
-  errors?: string[];
 }
 
 export default function AdminDashboard({ onClose }: { onClose: () => void }) {
@@ -49,7 +41,6 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
   const [searchTerm, setSearchTerm] = useState("");
   const [suburbFilter, setSuburbFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
-  const [dateFilter, setDateFilter] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -57,7 +48,7 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
   const [showSheetCode, setShowSheetCode] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
 
-  // Live chime sound trigger using native Web Audio synthesizer
+  // Sound chime synthesizer (Simple Web Audio API)
   const playChime = () => {
     try {
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
@@ -78,7 +69,7 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
       osc.start();
       osc.stop(ctx.currentTime + 0.4);
     } catch (e) {
-      console.log("Audio notification blocked by browser.");
+      console.log("Audio notification blocked.");
     }
   };
 
@@ -122,14 +113,14 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
     }
   }, []);
 
-  // Set up 10-second polling interval
+  // Polling Interval for live updates
   useEffect(() => {
     if (!isAuthenticated) return;
     const interval = setInterval(() => {
       fetchBookings(true);
     }, 10000);
     return () => clearInterval(interval);
-  }, [isAuthenticated, bookings]);
+  }, [isAuthenticated, bookings.length]);
 
   const handleLogin = async (e: FormEvent) => {
     e.preventDefault();
@@ -152,7 +143,7 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
         setLoginError(resData.error || "Incorrect admin credentials.");
       }
     } catch (e) {
-      setLoginError("Failed to authenticate with system server. Please make sure the backend is active.");
+      setLoginError("Failed to authenticate with system server.");
     } finally {
       setLoadingLogin(false);
     }
@@ -207,9 +198,8 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
     
     const matchesSuburb = suburbFilter === "" || b.area === suburbFilter;
     const matchesStatus = statusFilter === "" || b.status === statusFilter;
-    const matchesDate = dateFilter === "" || b.preferredDate === dateFilter;
 
-    return matchesSearch && matchesSuburb && matchesStatus && matchesDate;
+    return matchesSearch && matchesSuburb && matchesStatus;
   });
 
   const stats = {
@@ -220,21 +210,10 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
     revenue: bookings.reduce((acc, b) => acc + (b.visitingFee || 0), 0)
   };
 
-  const appsScriptCode = `/*
-  Rapid Cool Services - Google Sheets App Script 
-  Paste this inside your Google Sheet:
-  1. Open sheets.google.com -> Create a sheet named "Rapid Cool Services Bookings"
-  2. Click Extensions -> Apps Script
-  3. Replace the entire code with the block below, save, and click "Deploy -> New Deployment"
-  4. Choose type: Web App, Execute as: Me, Who has access: Anyone
-  5. Copy the Web App Deployment URL and paste it as your "GOOGLE_SHEET_WEBHOOK_URL" in your environment variables!
-*/
-
-function doPost(e) {
+  const appsScriptCode = `function doPost(e) {
   try {
     const data = JSON.parse(e.postData.contents);
     const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
-    
     if (data.action === "addBooking") {
       sheet.appendRow([
         data.id,
@@ -252,82 +231,33 @@ function doPost(e) {
       ]);
       return ContentService.createTextOutput(JSON.stringify({ success: true })).setMimeType(ContentService.MimeType.JSON);
     }
-    
-    if (data.action === "updateBooking") {
-      const rows = sheet.getDataRange().getValues();
-      for (let i = 1; i < rows.length; i++) {
-        if (rows[i][0] === data.id) {
-          sheet.getRange(i + 1, 12).setValue(data.status); 
-          break;
-        }
-      }
-      return ContentService.createTextOutput(JSON.stringify({ success: true, updated: true })).setMimeType(ContentService.MimeType.JSON);
-    }
-    
     return ContentService.createTextOutput(JSON.stringify({ success: false, error: "Invalid Action" })).setMimeType(ContentService.MimeType.JSON);
-    
   } catch (err) {
     return ContentService.createTextOutput(JSON.stringify({ success: false, error: err.message })).setMimeType(ContentService.MimeType.JSON);
   }
 }`;
 
-  const copyToClipboard = () => {
-    navigator.clipboard.writeText(appsScriptCode);
-    setCopiedCode(true);
-    setTimeout(() => setCopiedCode(false), 2000);
-  };
-
   return (
     <div className="bg-[#030d1a] min-h-screen text-slate-100 font-sans selection:bg-amber-500 selection:text-slate-950 relative">
       
-      {/* Non-motion Standard React Toast Alert */}
+      {/* Real-time Notification */}
       {newBookingNotification && (
-        <div className="fixed top-20 right-6 z-[9999] max-w-sm w-full bg-[#021329] border-2 border-amber-500 rounded-2xl p-5 shadow-2xl text-left backdrop-blur-md transition-all duration-300">
+        <div className="fixed top-20 right-6 z-[9999] max-w-sm w-full bg-[#021329] border-2 border-amber-500 rounded-2xl p-5 shadow-2xl text-left backdrop-blur-md">
           <div className="flex items-start justify-between">
-            <div className="flex items-center space-x-2.5">
-              <span className="flex h-3 w-3 relative">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-3 w-3 bg-rose-500"></span>
-              </span>
-              <span className="text-[10px] font-black uppercase tracking-wider text-amber-400 font-mono">
-                🚨 LIVE WEBSITE NOTIFICATION
-              </span>
-            </div>
+            <span className="text-[10px] font-black uppercase tracking-wider text-amber-400 font-mono">
+              🚨 LIVE WEBSITE NOTIFICATION
+            </span>
             <button
               onClick={() => setNewBookingNotification(null)}
-              className="text-slate-400 hover:text-white transition text-xs font-bold px-1.5 py-0.5 rounded bg-white/5"
+              className="text-slate-400 hover:text-white text-xs font-bold px-1.5 py-0.5 rounded bg-white/5"
             >
               ✕
             </button>
           </div>
-
           <div className="mt-3.5 space-y-1.5">
             <p className="text-xs text-white leading-relaxed">
-              <strong>{newBookingNotification.customerName}</strong> has placed a new booking for <strong className="text-[#38bdf8]">{newBookingNotification.applianceType}</strong> in <strong className="text-white">{newBookingNotification.area}</strong>!
+              <strong>{newBookingNotification.customerName}</strong> has placed a booking for <strong className="text-[#38bdf8]">{newBookingNotification.applianceType}</strong> in <strong>{newBookingNotification.area}</strong>!
             </p>
-            <div className="text-[11px] text-slate-300 font-mono flex justify-between">
-              <span>Phone: +91 {newBookingNotification.mobileNumber}</span>
-              <span className="text-amber-400 font-bold">₹{newBookingNotification.visitingFee}</span>
-            </div>
-          </div>
-
-          <div className="mt-4 flex gap-2 justify-end">
-            <button
-              onClick={() => {
-                const id = newBookingNotification.id;
-                setNewBookingNotification(null);
-                setSearchTerm(id);
-              }}
-              className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-[#011e41] text-[10px] font-black uppercase rounded-lg tracking-wider transition"
-            >
-              View Ticket
-            </button>
-            <button
-              onClick={() => setNewBookingNotification(null)}
-              className="px-3.5 py-1.5 bg-white/10 hover:bg-white/15 text-white text-[10px] font-bold uppercase rounded-lg transition"
-            >
-              Dismiss
-            </button>
           </div>
         </div>
       )}
@@ -343,12 +273,9 @@ function doPost(e) {
               <ArrowLeft className="w-4 h-4" />
             </button>
             <div>
-              <span className="text-[9px] font-black tracking-widest text-amber-500 uppercase font-mono">
-                Rapid Cool Services
-              </span>
+              <span className="text-[9px] font-black tracking-widest text-amber-500 uppercase font-mono">Rapid Cool</span>
               <h1 className="text-sm font-black uppercase text-white tracking-tight flex items-center">
                 <span>Central Management Dashboard</span>
-                <span className="ml-2 w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
               </h1>
             </div>
           </div>
@@ -360,40 +287,35 @@ function doPost(e) {
                 className="bg-transparent border border-rose-900 text-rose-400 hover:bg-rose-950/20 px-3.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center space-x-1.5 cursor-pointer"
               >
                 <LogOut className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Logout Session</span>
+                <span className="hidden sm:inline">Logout</span>
               </button>
             )}
             <button
               onClick={onClose}
               className="bg-white/10 hover:bg-white/15 text-white px-3.5 py-1.5 rounded-lg text-xs font-black transition cursor-pointer"
             >
-              EXIT ADMIN
+              EXIT
             </button>
           </div>
         </div>
       </header>
 
-      {/* Main Container */}
+      {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
         
-        {/* LOGIN GATE SCREEN */}
         {!isAuthenticated ? (
+          /* Secure login */
           <div className="max-w-md mx-auto py-16">
             <div className="bg-[#021329]/80 border border-blue-900/50 rounded-2xl p-8 shadow-2xl space-y-6">
               <div className="text-center space-y-2">
                 <div className="w-14 h-14 bg-amber-500/10 text-amber-400 border border-amber-500/30 rounded-2xl flex items-center justify-center mx-auto text-2xl">
-                  <Lock className="w-6 h-6 stroke-[2]" />
+                  <Lock className="w-6 h-6" />
                 </div>
-                <h2 className="text-xl font-extrabold uppercase tracking-tight text-white mt-4">
-                  Admin Sign-In
-                </h2>
-                <p className="text-xs text-slate-400 leading-relaxed max-w-xs mx-auto">
-                  Owner dashboard is securely protected. Please sign in using the Rapid Cool administrative credentials.
-                </p>
+                <h2 className="text-xl font-extrabold uppercase text-white mt-4">Admin Sign-In</h2>
               </div>
 
               {loginError && (
-                <div className="bg-red-950/30 border border-red-900/50 text-red-400 p-3.5 rounded-xl text-xs font-semibold leading-relaxed flex items-center space-x-2">
+                <div className="bg-red-950/30 border border-red-900/50 text-red-400 p-3.5 rounded-xl text-xs font-semibold flex items-center space-x-2">
                   <AlertTriangle className="w-4 h-4 shrink-0" />
                   <span>{loginError}</span>
                 </div>
@@ -401,9 +323,7 @@ function doPost(e) {
 
               <form onSubmit={handleLogin} className="space-y-4 text-left">
                 <div>
-                  <label className="block text-[9px] font-black uppercase text-slate-400 tracking-wider mb-1 font-mono">
-                    Admin Username
-                  </label>
+                  <label className="block text-[9px] font-black uppercase text-slate-400 tracking-wider mb-1 font-mono">Username</label>
                   <input
                     type="text"
                     required
@@ -414,9 +334,7 @@ function doPost(e) {
                   />
                 </div>
                 <div>
-                  <label className="block text-[9px] font-black uppercase text-slate-400 tracking-wider mb-1 font-mono">
-                    Security Password
-                  </label>
+                  <label className="block text-[9px] font-black uppercase text-slate-400 tracking-wider mb-1 font-mono">Password</label>
                   <input
                     type="password"
                     required
@@ -430,110 +348,69 @@ function doPost(e) {
                 <button
                   type="submit"
                   disabled={loadingLogin}
-                  className="w-full bg-amber-500 hover:bg-amber-600 text-[#011e41] py-3.5 rounded-xl font-black text-xs uppercase tracking-widest transition shadow-lg mt-2 flex items-center justify-center space-x-2 disabled:opacity-50"
+                  className="w-full bg-amber-500 hover:bg-amber-600 text-[#011e41] py-3.5 rounded-xl font-black text-xs uppercase transition tracking-widest flex items-center justify-center space-x-2 disabled:opacity-50"
                 >
-                  {loadingLogin ? (
-                    <span>Authenticating System...</span>
-                  ) : (
-                    <>
-                      <Lock className="w-4 h-4" />
-                      <span>Authenticate Securely</span>
-                    </>
-                  )}
+                  {loadingLogin ? "Authenticating..." : "Authenticate"}
                 </button>
               </form>
-
-              <div className="text-center pt-2">
-                <button
-                  onClick={onClose}
-                  className="text-xs text-slate-500 hover:text-slate-350 transition flex items-center justify-center gap-1 mx-auto"
-                >
-                  <ArrowLeft className="w-3.5 h-3.5" />
-                  Return plain web store
-                </button>
-              </div>
             </div>
           </div>
         ) : (
-          /* ACTUAL ADMINISTRATIVE WORKSPACE */
+          /* WORKSPACE */
           <div className="space-y-8">
             
-            {/* Quick Stats Grid */}
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-left">
-              <div className="bg-[#021329]/60 border border-blue-900/30 rounded-xl p-4.5 space-y-1">
-                <span className="text-[9px] font-mono font-bold uppercase text-slate-400 block">Total Tickets</span>
+            {/* Quick Stats */}
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-left font-mono">
+              <div className="bg-[#021329]/60 border border-blue-900/30 rounded-xl p-4.5">
+                <span className="text-[9px] font-bold uppercase text-slate-400 block">Total Tickets</span>
                 <span className="text-2xl font-black text-white block">{stats.total}</span>
-                <span className="text-[10px] text-slate-400 font-mono">In local cache</span>
               </div>
-              <div className="bg-[#021329]/60 border border-blue-900/30 rounded-xl p-4.5 space-y-1">
-                <span className="text-[9px] font-mono font-bold uppercase text-amber-400 block">⚡ New Bookings</span>
+              <div className="bg-[#021329]/60 border border-blue-900/30 rounded-xl p-4.5">
+                <span className="text-[9px] font-bold uppercase text-amber-400 block">⚡ New Bookings</span>
                 <span className="text-2xl font-black text-amber-400 block">{stats.new}</span>
-                <span className="text-[10px] text-slate-400 font-mono">Awaiting dispatch</span>
               </div>
-              <div className="bg-[#021329]/60 border border-blue-900/30 rounded-xl p-4.5 space-y-1">
-                <span className="text-[9px] font-mono font-bold uppercase text-blue-400 block">🛠️ Assigned Active</span>
+              <div className="bg-[#021329]/60 border border-blue-900/30 rounded-xl p-4.5">
+                <span className="text-[9px] font-bold uppercase text-blue-400 block">🛠️ Assigned</span>
                 <span className="text-2xl font-black text-blue-400 block">{stats.assigned}</span>
-                <span className="text-[10px] text-slate-400 font-mono">Technicians en route</span>
               </div>
-              <div className="bg-[#021329]/60 border border-blue-900/30 rounded-xl p-4.5 space-y-1">
-                <span className="text-[9px] font-mono font-bold uppercase text-emerald-400 block">✓ Completed</span>
+              <div className="bg-[#021329]/60 border border-blue-900/30 rounded-xl p-4.5">
+                <span className="text-[9px] font-bold uppercase text-emerald-400 block">✓ Completed</span>
                 <span className="text-2xl font-black text-emerald-400 block">{stats.completed}</span>
-                <span className="text-[10px] text-slate-400 font-mono">Invoices finalised</span>
               </div>
-              <div className="bg-[#021329]/60 border border-amber-500/20 rounded-xl p-4.5 space-y-1 col-span-2 md:col-span-1">
-                <span className="text-[9px] font-mono font-bold uppercase text-amber-500 block">Visiting Escrow</span>
+              <div className="bg-[#021329]/60 border border-amber-500/20 rounded-xl p-4.5 col-span-2 md:col-span-1">
+                <span className="text-[9px] font-bold uppercase text-amber-500 block">Visiting Fees</span>
                 <span className="text-2xl font-black text-amber-500 block">₹{stats.revenue}</span>
-                <span className="text-[10px] text-slate-400 font-mono">Waived on final repair</span>
               </div>
             </div>
 
-            {/* Google Sheet Config */}
+            {/* Google Sheets Trigger Instructions */}
             <div className="bg-[#011e41]/50 border border-blue-900/50 rounded-2xl p-6 space-y-4">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div className="space-y-1 text-left">
-                  <div className="flex items-center gap-2 text-amber-500">
-                    <FileSpreadsheet className="w-5 h-5 text-amber-400" />
-                    <span className="text-xs font-black tracking-wider uppercase font-mono">
-                      Google Sheets Integration Connected
-                    </span>
-                  </div>
-                  <h3 className="text-base font-extrabold text-white">
-                    Need to link a dynamic Google Sheet spreadsheet for live sync?
-                  </h3>
-                  <p className="text-xs text-slate-300 max-w-2xl leading-relaxed">
-                    Keep your Excel Sheets up to date automatically! We support appending real bookings as fresh rows directly into your selected Google Sheet via our secure lightweight micro-Apps Script.
+                  <h3 className="text-base font-extrabold text-white">Google Sheets Integration</h3>
+                  <p className="text-xs text-slate-350 max-w-2xl leading-relaxed">
+                    Append real website bookings automatically as fresh rows into your selected Google Spreadsheet.
                   </p>
                 </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setShowSheetCode(!showSheetCode)}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-[11px] rounded-lg uppercase tracking-wider transition cursor-pointer"
-                  >
-                    {showSheetCode ? "Hide Instruction Script" : "Reveal Google Script"}
-                  </button>
-                </div>
+                <button
+                  onClick={() => setShowSheetCode(!showSheetCode)}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-[11px] rounded-lg uppercase tracking-wider transition"
+                >
+                  {showSheetCode ? "Hide Instructions" : "Reveal Apps Script"}
+                </button>
               </div>
 
               {showSheetCode && (
-                <div className="overflow-hidden space-y-3 pt-4 border-t border-blue-900/40">
-                  <div className="text-xs text-left text-slate-300 space-y-1.5 bg-slate-950 p-4 rounded-xl border border-blue-900/30">
-                    <p><strong>Step 1:</strong> Go to <a href="https://sheets.google.com" target="_blank" rel="noreferrer" className="text-amber-400 underline font-bold">sheets.google.com</a> and build a spreadsheet with the name <strong>"Rapid Cool Services Bookings"</strong>.</p>
-                    <p><strong>Step 2:</strong> In the upper menu, go to <strong>Extensions ➔ Apps Script</strong>.</p>
-                    <p><strong>Step 3:</strong> Paste the code block below, replacing any template code there perfectly.</p>
-                    <p><strong>Step 4:</strong> Click <strong>Deploy ➔ New Deployment</strong>. Choose <strong>Web App</strong>, change Who has access to <strong>"Anyone"</strong>, execute as <strong>"Me"</strong>, and click Deploy.</p>
-                    <p><strong>Step 5:</strong> Copy the output Web App URL and add it to your <code>.env.example / server</code> environment secrets as <code>GOOGLE_SHEET_WEBHOOK_URL</code>.</p>
-                  </div>
-
+                <div className="space-y-3 pt-4 border-t border-blue-900/40 text-left">
+                  <p className="text-xs text-slate-300">Copy code below and paste under <strong>Extensions ➔ Apps Script</strong> on your Google Spreadsheet.</p>
                   <div className="relative">
-                    <pre className="text-[10px] text-slate-300 overflow-x-auto text-left bg-slate-950 p-4.5 rounded-xl border border-blue-900/60 font-mono leading-relaxed max-h-72">
+                    <pre className="text-[10px] text-slate-300 overflow-x-auto bg-slate-950 p-4.5 rounded-xl border border-blue-900/60 font-mono">
                       {appsScriptCode}
                     </pre>
                     <button
                       onClick={copyToClipboard}
-                      className="absolute top-3 right-3 bg-white/10 hover:bg-white/15 text-white p-2 rounded-lg text-xs font-bold transition flex items-center space-x-1.5"
-                      title="Copy Apps Script to clipboard"
+                      className="absolute top-3 right-3 bg-white/10 hover:bg-white/15 text-white p-2 rounded-lg text-xs font-bold transition"
                     >
-                      <Copy className="w-3.5 h-3.5" />
                       <span>{copiedCode ? "Copied!" : "Copy Code"}</span>
                     </button>
                   </div>
@@ -541,11 +418,11 @@ function doPost(e) {
               )}
             </div>
 
-            {/* Search & Operational Filters Panel */}
-            <div className="bg-[#020d1c]/80 border border-blue-900/30 rounded-2xl p-5 space-y-4">
+            {/* Search Filters */}
+            <div className="bg-[#020d1c]/80 border border-blue-900/30 rounded-2xl p-5">
               <div className="flex flex-col md:flex-row gap-4 items-center justify-between text-left">
                 <div className="relative w-full md:w-80">
-                  <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
+                  <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-450">
                     <Search className="w-4 h-4" />
                   </span>
                   <input
@@ -553,7 +430,7 @@ function doPost(e) {
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     placeholder="Search ID, name, number, address..."
-                    className="w-full bg-slate-950 border border-blue-900/50 rounded-xl py-2 px-10 text-xs placeholder-slate-500 focus:outline-none focus:border-blue-500 font-bold"
+                    className="w-full bg-slate-950 border border-blue-900/50 rounded-xl py-2 px-10 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 font-bold"
                   />
                 </div>
 
@@ -587,27 +464,26 @@ function doPost(e) {
                   <div className="col-span-2 sm:col-span-1">
                     <button
                       onClick={triggerCSVDownload}
-                      className="w-full py-2 bg-amber-500 hover:bg-amber-600 text-[#011e41] text-xs font-black uppercase rounded-xl tracking-wider transition-all flex items-center justify-center space-x-1.5 cursor-pointer"
+                      className="w-full py-2 bg-amber-500 hover:bg-amber-600 text-[#011e41] text-xs font-black uppercase rounded-xl tracking-wider transition flex items-center justify-center space-x-1.5"
                     >
-                      <FileSpreadsheet className="w-3.5 h-3.5 stroke-[2.5]" />
-                      <span>Export to CSV</span>
+                      <FileSpreadsheet className="w-3.5 h-3.5" />
+                      <span>Export CSV</span>
                     </button>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Live Table View */}
+            {/* Table */}
             <div className="bg-[#021329]/20 border border-blue-900/20 rounded-2xl overflow-hidden shadow-2xl">
               <div className="bg-slate-950/60 py-3.5 px-6 border-b border-blue-900/30 flex items-center justify-between">
                 <span className="text-xs uppercase font-black tracking-widest text-[#38bdf8] font-mono">
-                  Active Dispatch Database ({filteredBookings.length} bookings listed)
+                  Active Dispatch Database ({filteredBookings.length} items)
                 </span>
                 <button
                   onClick={() => fetchBookings()}
                   disabled={isRefreshing}
-                  className="p-1 text-slate-400 hover:text-white transition cursor-pointer"
-                  title="Reload Live Database"
+                  className="p-1 text-slate-400 hover:text-white transition"
                 >
                   <RefreshCw className={`w-4 h-4 ${isRefreshing ? "animate-spin" : ""}`} />
                 </button>
@@ -621,12 +497,6 @@ function doPost(e) {
               ) : filteredBookings.length === 0 ? (
                 <div className="text-center py-20 text-slate-500 text-xs font-mono space-y-2">
                   <p>🔍 No bookings found matching the selected search query.</p>
-                  <button 
-                    onClick={() => { setSearchTerm(""); setStatusFilter(""); setSuburbFilter(""); }}
-                    className="text-amber-500 hover:underline font-bold"
-                  >
-                    Reset Filter Query Settings
-                  </button>
                 </div>
               ) : (
                 <div className="overflow-x-auto">
@@ -651,7 +521,7 @@ function doPost(e) {
                             <span className="block text-[9px] text-[#38bdf8] font-bold mt-1 uppercase">Pref: {b.preferredDate}</span>
                           </td>
 
-                          <td className="py-4 px-5">
+                          <td className="py-4 px-5 text-left">
                             <strong className="block text-white text-sm font-extrabold">{b.customerName}</strong>
                             <div className="flex items-center space-x-1 text-slate-350 mt-1 font-mono font-bold">
                               <Phone className="w-3 h-3 text-amber-500 shrink-0" />
@@ -662,7 +532,7 @@ function doPost(e) {
                             )}
                           </td>
 
-                          <td className="py-4 px-5">
+                          <td className="py-4 px-5 text-left">
                             <strong className="block text-[#38bdf8] text-[13px] font-black uppercase">{b.applianceType}</strong>
                             <span className="block text-slate-300 mt-1 font-medium">{b.serviceRequired}</span>
                             <div className="flex gap-1.5 mt-2">
@@ -696,7 +566,7 @@ function doPost(e) {
                             )}
                           </td>
 
-                          <td className="py-4 px-4 font-mono">
+                          <td className="py-4 px-4 font-mono text-left">
                             <select
                               value={b.status}
                               onChange={(e) => updateBookingStatus(b.id, e.target.value as any)}
@@ -722,7 +592,7 @@ function doPost(e) {
                           <td className="py-4 px-5 text-center">
                             <div className="flex items-center justify-center gap-2">
                               <a
-                                href={`https://wa.me/91${b.mobileNumber}?text=Hello%20${encodeURIComponent(b.customerName)},%20this%20is%20Rapid%20Cool%20Services%20Mumbai.%20We%20received%20your%20booking%20for%20${encodeURIComponent(b.applianceType)}%20(ID:%20${b.id}).%20Our%20certified%20technician%20is%20dispatched%20to%20your%20address%20in%20${encodeURIComponent(b.area)}.%20Please%20verify%20if%20you%20are%20available%20now.`}
+                                href={`https://wa.me/91${b.mobileNumber}?text=Hello%20${encodeURIComponent(b.customerName)},%20this%20is%20Rapid%20Cool%20Services%20Mumbai.%20We%20received%20your%20booking%20for%20${encodeURIComponent(b.applianceType)}%20(ID:%20${b.id}).%20Our%20certified%20technician%20is%20dispatched%20to%20your%20address%20in%20${encodeURIComponent(b.area)}.%20Please%20verify%2520if%2520you%2520are%2520available%2520now.`}
                                 target="_blank"
                                 rel="noreferrer"
                                 className="p-1 px-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[9px] font-black uppercase tracking-wider flex items-center space-x-1 transition"
@@ -732,7 +602,7 @@ function doPost(e) {
                               </a>
                               <button
                                 onClick={() => deleteBookingRecord(b.id)}
-                                className="p-1.5 bg-rose-950/25 text-rose-400 border border-rose-900/40 rounded-lg hover:bg-rose-900 hover:text-white transition"
+                                className="p-1.5 bg-rose-950/25 text-rose-450 border border-rose-900/40 rounded-lg hover:bg-rose-900 hover:text-white transition"
                               >
                                 Delete
                               </button>
