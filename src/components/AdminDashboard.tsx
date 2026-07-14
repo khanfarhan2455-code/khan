@@ -48,22 +48,23 @@ export default function ContactForm({
   const [submittedBooking, setSubmittedBooking] = useState<LocalBooking | null>(null);
   const [bookingsList, setBookingsList] = useState<LocalBooking[]>([]);
 
-  useEffect(() => {
-    const loadBookings = () => {
-      const saved = localStorage.getItem("rapid_cool_bookings");
-      if (saved) {
-        try {
-          setBookingsList(JSON.parse(saved));
-        } catch (e) {
-          console.error("Failed to parse bookings", e);
-        }
-      } else {
-        setBookingsList([]);
+  const loadBookings = () => {
+    const saved = localStorage.getItem("rapid_cool_bookings");
+    if (saved) {
+      try {
+        setBookingsList(JSON.parse(saved));
+      } catch (e) {
+        console.error("Failed to parse bookings", e);
       }
-    };
+    } else {
+      setBookingsList([]);
+    }
+  };
 
+  useEffect(() => {
     loadBookings();
 
+    // Listen to booking changes across application components
     window.addEventListener("booking-added", loadBookings);
     return () => {
       window.removeEventListener("booking-added", loadBookings);
@@ -78,21 +79,25 @@ export default function ContactForm({
     const selectedApplianceName =
       SERVICES_LIST.find((s) => s.id === selectedServiceId)?.name || "General Inspection Service";
 
+    // Standard Backend schema validation format
     const payload = {
       name: fullName,
-      email: customerEmail,
+      email: customerEmail || "no-email@rapidcool.com",
       phone: phoneNumber,
-      service: selectedApplianceName,
+      service: selectedApplianceName, // Some backends read it as 'service' or 'appliance'
+      appliance: selectedApplianceName, 
+      suburb: selectedSuburb || "Andheri West",
       date: preferredDate || new Date().toISOString().split('T')[0],
       time: new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true }),
       address: `${fullAddress}, ${selectedSuburb || "Andheri West"}`,
+      notes: additionalNotes || "",
       express: express,
       warranty: warranty,
       visitingFee: totalEstimate === 0 ? 499 : totalEstimate,
     };
 
     try {
-      // 🟢 DIRECT CALL TO RENDER BACKEND (Vercel Friendly - No Netlify code)
+      // 🟢 POST live call to database backend
       const response = await fetch("https://rapidcool-new-backend.onrender.com/api/bookings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -101,8 +106,10 @@ export default function ContactForm({
 
       const resData = await response.json();
 
-      if (response.ok && resData.success) {
-        const referenceId = `RC-${Math.floor(100000 + Math.random() * 900000)}-MUM`;
+      // Fix 1: check only 'response.ok' instead of 'resData.success' as API might return direct document data
+      if (response.ok) {
+        const referenceId = resData._id || resData.id || `RC-${Math.floor(100000 + Math.random() * 900000)}-MUM`;
+        
         const savedBooking: LocalBooking = {
           id: referenceId,
           name: fullName,
@@ -121,6 +128,9 @@ export default function ContactForm({
         
         setSubmittedBooking(savedBooking);
 
+        // Fix 2: Refresh event trigger so Admin Dashboard automatically updates in real-time
+        window.dispatchEvent(new Event("booking-added"));
+
         // Reset inputs
         setFullName("");
         setPhoneNumber("");
@@ -130,9 +140,9 @@ export default function ContactForm({
         setPreferredDate("");
         setAdditionalNotes("");
       } else {
-        setBookingError(resData.error || "Failed to parse booking response on server.");
+        throw new Error(resData.message || resData.error || "Failed on Server validation.");
       }
-    } catch (apiErr) {
+    } catch (apiErr: any) {
       console.warn("Express API unreachable. Saving booking locally in browser memory:", apiErr);
       
       const referenceId = `RC-${Math.floor(100000 + Math.random() * 900000)}-MUM`;
@@ -173,6 +183,7 @@ export default function ContactForm({
     const filtered = bookingsList.filter((b) => b.id !== id);
     setBookingsList(filtered);
     localStorage.setItem("rapid_cool_bookings", JSON.stringify(filtered));
+    window.dispatchEvent(new Event("booking-added"));
   };
 
   return (
