@@ -2,11 +2,27 @@
 @import "tailwindcss";
 
 @theme {
+  /* Fonts */
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+  /* Custom Colors (Used in UI components) */
+  --color-gray-150: #eef1f6;
+  --color-slate-150: #eef2f6;
+  --color-slate-350: #94a3b8; /* fallback/custom blend */
+  --color-slate-850: #1e293b;
+  --color-amber-550: #d97706; /* custom deep amber */
+
+  /* Custom Spacing (e.g., p-4.5, m-4.5 for 18px padding) */
+  --spacing-4.5: 1.125rem;
 }
 
-/* Custom fade effects and smooth adjustments */
+/* Custom global adjustments */
 html {
   scroll-behavior: smooth;
+}
+
+/* (Optional) Smooth transition for inputs and buttons globally */
+input, select, textarea, button {
+  transition: all 0.2s ease-in-out;
 }
