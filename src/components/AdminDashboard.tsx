@@ -1,6 +1,6 @@
 import { useState, useEffect, FormEvent } from "react";
 import { 
-  Lock, Search, RefreshCw, LogOut, Phone, MessageSquare, MapPin, Copy, AlertTriangle, ArrowLeft, FileSpreadsheet
+  Lock, Search, RefreshCw, LogOut, Phone, MessageSquare, MapPin, AlertTriangle, ArrowLeft
 } from "lucide-react";
 import { MUMBAI_SUBURBS } from "../data";
 
@@ -44,11 +44,7 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // Sheet Integration Guide Tab
-  const [showSheetCode, setShowSheetCode] = useState(false);
-  const [copiedCode, setCopiedCode] = useState(false);
-
-  // Sound chime synthesizer (Simple Web Audio API)
+  // Audio Notification
   const playChime = () => {
     try {
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
@@ -68,8 +64,8 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
       gain.connect(ctx.destination);
       osc.start();
       osc.stop(ctx.currentTime + 0.4);
-    } catch (e) {
-      console.log("Audio notification blocked.");
+    } catch {
+      // Ignore blocked audio playback
     }
   };
 
@@ -79,7 +75,7 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
       const response = await fetch(`${API_BASE_URL}/api/bookings`);
       if (response.ok) {
         const resData = await response.json();
-        const freshList: AdminBooking[] = resData.bookings || [];
+        const freshList: AdminBooking[] = Array.isArray(resData?.bookings) ? resData.bookings : [];
         
         if (isSilent && bookings.length > 0) {
           const existingIds = new Set(bookings.map(b => b.id));
@@ -102,7 +98,6 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
     }
   };
 
-  // Load Session on start
   useEffect(() => {
     const savedToken = localStorage.getItem("rapid_cool_admin_token");
     if (savedToken) {
@@ -113,7 +108,6 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
     }
   }, []);
 
-  // Polling Interval for live updates
   useEffect(() => {
     if (!isAuthenticated) return;
     const interval = setInterval(() => {
@@ -142,7 +136,7 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
       } else {
         setLoginError(resData.error || "Incorrect admin credentials.");
       }
-    } catch (e) {
+    } catch {
       setLoginError("Failed to authenticate with system server.");
     } finally {
       setLoadingLogin(false);
@@ -165,10 +159,10 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
 
       if (response.ok) {
         setBookings(prev =>
-          prev.map(b => (b.id === id ? { ...b, status: newStatus } : b))
+          Array.isArray(prev) ? prev.map(b => (b.id === id ? { ...b, status: newStatus } : b)) : []
         );
       }
-    } catch (e) {
+    } catch {
       alert("Error updating booking status.");
     }
   };
@@ -178,9 +172,9 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
     try {
       const response = await fetch(`${API_BASE_URL}/api/bookings/${id}`, { method: "DELETE" });
       if (response.ok) {
-        setBookings(prev => prev.filter(b => b.id !== id));
+        setBookings(prev => (Array.isArray(prev) ? prev.filter(b => b.id !== id) : []));
       }
-    } catch (e) {
+    } catch {
       alert("Failed to delete booking.");
     }
   };
@@ -189,12 +183,15 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
     window.open(`${API_BASE_URL}/api/bookings/export`, "_blank");
   };
 
-  const filteredBookings = bookings.filter((b) => {
+  // Safe Filter Guard against Crash
+  const safeBookingsList = Array.isArray(bookings) ? bookings : [];
+  const filteredBookings = safeBookingsList.filter((b) => {
+    if (!b) return false;
     const matchesSearch = 
-      b.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      b.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      b.mobileNumber.includes(searchTerm) ||
-      b.address.toLowerCase().includes(searchTerm.toLowerCase());
+      (b.customerName || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (b.id || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (b.mobileNumber || "").includes(searchTerm) ||
+      (b.address || "").toLowerCase().includes(searchTerm.toLowerCase());
     
     const matchesSuburb = suburbFilter === "" || b.area === suburbFilter;
     const matchesStatus = statusFilter === "" || b.status === statusFilter;
@@ -203,39 +200,12 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
   });
 
   const stats = {
-    total: bookings.length,
-    new: bookings.filter(b => b.status === "New").length,
-    assigned: bookings.filter(b => b.status === "Assigned").length,
-    completed: bookings.filter(b => b.status === "Completed").length,
-    revenue: bookings.reduce((acc, b) => acc + (b.visitingFee || 0), 0)
+    total: safeBookingsList.length,
+    new: safeBookingsList.filter(b => b?.status === "New").length,
+    assigned: safeBookingsList.filter(b => b?.status === "Assigned").length,
+    completed: safeBookingsList.filter(b => b?.status === "Completed").length,
+    revenue: safeBookingsList.reduce((acc, b) => acc + (b?.visitingFee || 0), 0)
   };
-
-  const appsScriptCode = `function doPost(e) {
-  try {
-    const data = JSON.parse(e.postData.contents);
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
-    if (data.action === "addBooking") {
-      sheet.appendRow([
-        data.id,
-        data.date,
-        data.time,
-        data.customerName,
-        "'" + data.mobileNumber, 
-        data.customerEmail || "N/A",
-        data.applianceType,
-        data.serviceRequired,
-        data.area,
-        data.address,
-        data.preferredDate,
-        data.status
-      ]);
-      return ContentService.createTextOutput(JSON.stringify({ success: true })).setMimeType(ContentService.MimeType.JSON);
-    }
-    return ContentService.createTextOutput(JSON.stringify({ success: false, error: "Invalid Action" })).setMimeType(ContentService.MimeType.JSON);
-  } catch (err) {
-    return ContentService.createTextOutput(JSON.stringify({ success: false, error: err.message })).setMimeType(ContentService.MimeType.JSON);
-  }
-}`;
 
   return (
     <div className="bg-[#030d1a] min-h-screen text-slate-100 font-sans selection:bg-amber-500 selection:text-slate-950 relative">
@@ -302,7 +272,6 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
-        
         {!isAuthenticated ? (
           /* Secure login */
           <div className="max-w-md mx-auto py-16">
@@ -348,7 +317,7 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
                 <button
                   type="submit"
                   disabled={loadingLogin}
-                  className="w-full bg-amber-500 hover:bg-amber-600 text-[#011e41] py-3.5 rounded-xl font-black text-xs uppercase transition tracking-widest flex items-center justify-center space-x-2 disabled:opacity-50"
+                  className="w-full bg-amber-500 hover:bg-amber-600 text-[#011e41] py-3.5 rounded-xl font-black text-xs uppercase transition tracking-widest flex items-center justify-center space-x-2 disabled:opacity-50 cursor-pointer"
                 >
                   {loadingLogin ? "Authenticating..." : "Authenticate"}
                 </button>
@@ -383,41 +352,6 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
               </div>
             </div>
 
-            {/* Google Sheets Trigger Instructions */}
-            <div className="bg-[#011e41]/50 border border-blue-900/50 rounded-2xl p-6 space-y-4">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                <div className="space-y-1 text-left">
-                  <h3 className="text-base font-extrabold text-white">Google Sheets Integration</h3>
-                  <p className="text-xs text-slate-350 max-w-2xl leading-relaxed">
-                    Append real website bookings automatically as fresh rows into your selected Google Spreadsheet.
-                  </p>
-                </div>
-                <button
-                  onClick={() => setShowSheetCode(!showSheetCode)}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-[11px] rounded-lg uppercase tracking-wider transition"
-                >
-                  {showSheetCode ? "Hide Instructions" : "Reveal Apps Script"}
-                </button>
-              </div>
-
-              {showSheetCode && (
-                <div className="space-y-3 pt-4 border-t border-blue-900/40 text-left">
-                  <p className="text-xs text-slate-300">Copy code below and paste under <strong>Extensions ➔ Apps Script</strong> on your Google Spreadsheet.</p>
-                  <div className="relative">
-                    <pre className="text-[10px] text-slate-300 overflow-x-auto bg-slate-950 p-4.5 rounded-xl border border-blue-900/60 font-mono">
-                      {appsScriptCode}
-                    </pre>
-                    <button
-                      onClick={copyToClipboard}
-                      className="absolute top-3 right-3 bg-white/10 hover:bg-white/15 text-white p-2 rounded-lg text-xs font-bold transition"
-                    >
-                      <span>{copiedCode ? "Copied!" : "Copy Code"}</span>
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-
             {/* Search Filters */}
             <div className="bg-[#020d1c]/80 border border-blue-900/30 rounded-2xl p-5">
               <div className="flex flex-col md:flex-row gap-4 items-center justify-between text-left">
@@ -442,7 +376,7 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
                       className="w-full bg-slate-950 border border-blue-900/50 rounded-xl py-2 px-3 text-xs focus:outline-none focus:border-amber-500 font-bold cursor-pointer text-slate-300"
                     >
                       <option value="">All Mumbai Suburbs</option>
-                      {MUMBAI_SUBURBS.map(sub => (
+                      {Array.isArray(MUMBAI_SUBURBS) && MUMBAI_SUBURBS.map(sub => (
                         <option key={sub} value={sub}>{sub}</option>
                       ))}
                     </select>
@@ -464,9 +398,8 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
                   <div className="col-span-2 sm:col-span-1">
                     <button
                       onClick={triggerCSVDownload}
-                      className="w-full py-2 bg-amber-500 hover:bg-amber-600 text-[#011e41] text-xs font-black uppercase rounded-xl tracking-wider transition flex items-center justify-center space-x-1.5"
+                      className="w-full py-2 bg-amber-500 hover:bg-amber-600 text-[#011e41] text-xs font-black uppercase rounded-xl tracking-wider transition flex items-center justify-center space-x-1.5 cursor-pointer"
                     >
-                      <FileSpreadsheet className="w-3.5 h-3.5" />
                       <span>Export CSV</span>
                     </button>
                   </div>
@@ -483,7 +416,7 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
                 <button
                   onClick={() => fetchBookings()}
                   disabled={isRefreshing}
-                  className="p-1 text-slate-400 hover:text-white transition"
+                  className="p-1 text-slate-400 hover:text-white transition cursor-pointer"
                 >
                   <RefreshCw className={`w-4 h-4 ${isRefreshing ? "animate-spin" : ""}`} />
                 </button>
@@ -592,7 +525,7 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
                           <td className="py-4 px-5 text-center">
                             <div className="flex items-center justify-center gap-2">
                               <a
-                                href={`https://wa.me/91${b.mobileNumber}?text=Hello%20${encodeURIComponent(b.customerName)},%20this%20is%20Rapid%20Cool%20Services%20Mumbai.%20We%20received%20your%20booking%20for%20${encodeURIComponent(b.applianceType)}%20(ID:%20${b.id}).%20Our%20certified%20technician%20is%20dispatched%20to%20your%20address%20in%20${encodeURIComponent(b.area)}.%20Please%20verify%2520if%2520you%2520are%2520available%2520now.`}
+                                href={`https://wa.me/91${b.mobileNumber}?text=Hello%20${encodeURIComponent(b.customerName)},%20this%20is%20Rapid%20Cool%20Services%20Mumbai.%20We%20received%20your%20booking%20for%20${encodeURIComponent(b.applianceType)}%20(ID:%20${b.id}).%20Our%20certified%20technician%20is%20dispatched%20to%20your%20address%20in%20${encodeURIComponent(b.area)}.`}
                                 target="_blank"
                                 rel="noreferrer"
                                 className="p-1 px-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[9px] font-black uppercase tracking-wider flex items-center space-x-1 transition"
@@ -602,7 +535,7 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
                               </a>
                               <button
                                 onClick={() => deleteBookingRecord(b.id)}
-                                className="p-1.5 bg-rose-950/25 text-rose-450 border border-rose-900/40 rounded-lg hover:bg-rose-900 hover:text-white transition"
+                                className="p-1.5 bg-rose-950/25 text-rose-450 border border-rose-900/40 rounded-lg hover:bg-rose-900 hover:text-white transition cursor-pointer"
                               >
                                 Delete
                               </button>
