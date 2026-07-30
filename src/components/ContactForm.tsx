@@ -240,7 +240,14 @@ export default function ContactForm({
                 <div>
                   <h4 className="font-extrabold text-[#011e41] text-base uppercase tracking-tight font-sans">Social Feed</h4>
                   <p className="text-gray-600 text-xs mt-1 font-mono">
-                    Instagram: <span className="text-[#0248a3] font-bold">{BRAND_CONTACT.instagram}</span>
+                    Instagram: <a
+                                href={`https://instagram.com/${BRAND_CONTACT.instagram}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-[#0248a3] font-bold hover:underline"
+                              >
+                                {BRAND_CONTACT.instagram}
+                              </a>
                   </p>
                   <p className="text-[10px] text-gray-500 mt-0.5 font-sans">
                     Email: rapidcoolservices0services@gmail.com
