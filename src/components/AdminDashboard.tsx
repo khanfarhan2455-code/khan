@@ -93,7 +93,7 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
         
         // If it is a background silent check and we already have some bookings loaded
         if (isSilent && bookings.length > 0) {
-          const existingIds = new Set(bookings.map(b => b.id));
+          const existingIds = new Set(bookings.map((b : AdminBooking) => b.id));
           const trulyNew = freshList.filter(b => !existingIds.has(b.id));
           
           if (trulyNew.length > 0) {
@@ -170,14 +170,14 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
 
   const updateBookingStatus = async (id: string, newStatus: "New" | "Assigned" | "Completed") => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/bookings/${id}`, {
+      const response = await fetch(`${API_BASE_URL}/api/bookings/`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: newStatus }),
+        body: JSON.stringify({ id : id, status : newStatus}),
       });
 
       if (response.ok) {
-        setBookings(prev =>
+        setBookings((prev : AdminBooking[]) =>
           prev.map(b => (b.id === id ? { ...b, status: newStatus } : b))
         );
       }
@@ -189,9 +189,13 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
   const deleteBookingRecord = async (id: string) => {
     if (!confirm("Are you sure you want to delete this booking permanently from the database?")) return;
     try {
-      const response = await fetch(`${API_BASE_URL}/api/bookings/${id}`, { method: "DELETE" });
+      const response = await fetch(`${API_BASE_URL}/api/bookings/`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+        });
       if (response.ok) {
-        setBookings(prev => prev.filter(b => b.id !== id));
+        setBookings((prev : AdminBooking[]) => prev.filter(b => b.id !== id));
       }
     } catch (e) {
       alert("Failed to delete booking.");
@@ -204,7 +208,7 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
   };
 
   // Filter Bookings logic client side for ultra responsive feedback
-  const filteredBookings = bookings.filter((b) => {
+  const filteredBookings = bookings.filter((b: AdminBooking) => {
     const matchesSearch = 
       b.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       b.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -221,10 +225,10 @@ export default function AdminDashboard({ onClose }: { onClose: () => void }) {
   // Calculate quick metrics
   const stats = {
     total: bookings.length,
-    new: bookings.filter(b => b.status === "New").length,
-    assigned: bookings.filter(b => b.status === "Assigned").length,
-    completed: bookings.filter(b => b.status === "Completed").length,
-    revenue: bookings.reduce((acc, b) => acc + (b.visitingFee || 0), 0)
+    new: bookings.filter((b : AdminBooking)=> b.status === "New").length,
+    assigned: bookings.filter((b : AdminBooking)=> b.status === "Assigned").length,
+    completed: bookings.filter((b : AdminBooking)=> b.status === "Completed").length,
+    revenue: bookings.reduce((acc : number, b : AdminBooking) => acc + (b.visitingFee || 0), 0)
   };
 
   const appsScriptCode = `/*
