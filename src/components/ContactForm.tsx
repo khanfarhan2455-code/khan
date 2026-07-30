@@ -241,7 +241,7 @@ export default function ContactForm({
                   <h4 className="font-extrabold text-[#011e41] text-base uppercase tracking-tight font-sans">Social Feed</h4>
                   <p className="text-gray-600 text-xs mt-1 font-mono">
                     Instagram: <a
-                                href={`https://instagram.com/${BRAND_CONTACT.instagram}`}
+                                href={`https://instagram.com/${BRAND_CONTACT.instagram.replace(/^@/, "")}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="text-[#0248a3] font-bold hover:underline"
